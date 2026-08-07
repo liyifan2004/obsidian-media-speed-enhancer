@@ -14,8 +14,9 @@
 .mse-container {
   position: relative;
   display: block;
-  height: auto;
-  min-height: 32px;
+  /* v1.0.4 hotfix: 固定 40px 高度，让 absolute 子元素有正确的拉伸基准，
+     否则 audio 元素的 top:0 + bottom:0 会因容器塌陷为 0 高度而被压扁 */
+  height: 40px;
 }
 
 /* ---------------------------------------------------------------------------
