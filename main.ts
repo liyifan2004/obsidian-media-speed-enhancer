@@ -43,8 +43,8 @@ const CLS = {
   container: "mse-container",
   toolbar: "mse-toolbar",
   toolbarAutoHide: "mse-toolbar-auto-hide",
-  anchorWrap: "mse-anchor-wrap", // P1-8: 新增 — anchor 单独容器
-  controlsWrap: "mse-controls-wrap", // v1.0.3: 新增 — anchor + toolbar 的整体容器
+  anchorWrap: "mse-anchor-wrap", // v1.0.8: 已废弃，保留仅为兼容
+  controlsWrap: "mse-controls-wrap", // v1.0.3+: anchor + toolbar 整体容器
   clusterLeft: "mse-cluster mse-cluster-left",
   clusterRight: "mse-cluster mse-cluster-right",
   btn: "mse-btn",
@@ -55,9 +55,11 @@ const CLS = {
   adjustSpeed: "mse-adjust-speed",
   active: "is-active",
   menu: "mse-menu",
+  menuHeader: "mse-menu-header",
   menuItem: "mse-menu-item",
   menuItemActive: "is-active",
   menuCheck: "mse-menu-check",
+  menuSpeed: "mse-menu-speed",
 } as const;
 
 // Material Design Icons
@@ -535,10 +537,28 @@ try {
 
     container.appendChild(controlsWrap);
 
+    // v1.0.8: ResizeObserver 同步 controls-wrap 实际宽度到 CSS 变量，
+    // 让 audio 的 margin-left 精确跟随，避免按钮和原生控件之间的间隙
+    let rafId: number | null = null;
+    const updateControlsWidth = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const w = controlsWrap.getBoundingClientRect().width;
+        if (w > 0) {
+          container.style.setProperty("--mse-controls-width", `${w}px`);
+        }
+      });
+    };
+    const ro = new ResizeObserver(updateControlsWidth);
+    ro.observe(controlsWrap);
+    // 初次触发
+    updateControlsWidth();
+
     const cleanupEntry: ToolbarCleanup = {
       toolbar,
       anchorWrap,
-      controlsWrap, // v1.0.3: 用于清理
+      controlsWrap,
       cleanups: [
         anchor.cleanups,
         skipBack.cleanups,
@@ -546,11 +566,16 @@ try {
         hold.cleanups,
         adjust.cleanups,
         () => {
+          ro.disconnect();
+          if (rafId !== null) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+          }
+          container.style.removeProperty("--mse-controls-width");
           container.classList.remove(CLS.container);
           if (forcedRelative) {
             container.style.position = "";
           }
-          // v1.0.3: 不再需要清理 mediaEl inline style（CSS 处理）
         },
       ].flat(),
     };
@@ -582,8 +607,10 @@ try {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `${CLS.btn} ${CLS.anchor}`;
-    btn.title = "当前倍速（点击重置为 1.0×）";
-    btn.setAttribute("aria-label", "Current playback speed");
+    // v1.0.8: 只用 aria-label（Obsidian 自定义 tooltip 会用它），
+    // 不再设 title 避免原生 + 自定义双 tooltip
+    btn.setAttribute("aria-label", "当前倍速（点击打开倍速菜单）");
+    btn.setAttribute("aria-haspopup", "menu");
 
     const renderSpeed = () => {
       btn.textContent = `${formatRate(mediaEl.playbackRate)}×`;
@@ -591,27 +618,49 @@ try {
     renderSpeed();
 
     const bag = new ListenerBag();
-    const onClick = (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      mediaEl.playbackRate = 1.0;
-      renderSpeed();
-    };
-    const onContextMenu = (e: MouseEvent) => {
+    // v1.0.8: anchor 点击直接打开倍速菜单（用户希望"为什么是按钮"——给它一个清晰功能）
+    const openMenu = (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
       this.showAdjustMenu(mediaEl, btn);
     };
-    const onRateChange = () => renderSpeed();
 
-    bag.add(btn, "click", onClick);
-    bag.add(btn, "contextmenu", onContextMenu);
+    // v1.0.8: 全局倍速同步——ratechange 时如果开启，把当前 rate 广播给所有媒体
+    const onRateChange = () => {
+      renderSpeed();
+      if (this.settings.globalSync) {
+        this.applyGlobalRate(mediaEl.playbackRate, mediaEl);
+      }
+    };
+
+    bag.add(btn, "click", openMenu);
+    bag.add(btn, "contextmenu", openMenu);
     bag.add(mediaEl, "ratechange", onRateChange);
 
     return {
       btn,
       cleanups: [() => bag.clear()],
     };
+  }
+
+  /**
+   * v1.0.8: 全局倍速同步。
+   * 把 rate 应用到所有未在 excludeEl 中的 HTMLMediaElement。
+   * 用「下一帧」setTimeout 避免同步触发其他媒体的 ratechange 链式回调。
+   */
+  private applyGlobalRate(rate: number, excludeEl: HTMLMediaElement): void {
+    window.setTimeout(() => {
+      const all = document.querySelectorAll("audio, video");
+      for (const el of Array.from(all)) {
+        if (el === excludeEl) continue;
+        if ((el as HTMLMediaElement).playbackRate === rate) continue;
+        try {
+          (el as HTMLMediaElement).playbackRate = rate;
+        } catch (e) {
+          /* ignore */
+        }
+      }
+    }, 0);
   }
 
   private createSkipButton(
@@ -622,15 +671,19 @@ try {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `${CLS.btn} ${isBack ? CLS.skipBack : CLS.skipForward}`;
-    btn.title = isBack ? "后退 10 秒" : "前进 10 秒";
-    btn.setAttribute("aria-label", btn.title);
+    const label = isBack
+      ? `后退 ${this.settings.skipSeconds} 秒`
+      : `前进 ${this.settings.skipSeconds} 秒`;
+    // v1.0.8: 只用 aria-label 避免双 tooltip
+    btn.setAttribute("aria-label", label);
     btn.innerHTML = isBack ? SVG_REWIND_10 : SVG_FORWARD_10;
 
     const bag = new ListenerBag();
+    const skip = this.settings.skipSeconds;
     const onClick = (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const delta = isBack ? -10 : 10;
+      const delta = isBack ? -skip : skip;
       const duration = Number.isFinite(mediaEl.duration)
         ? mediaEl.duration
         : Infinity;
@@ -658,8 +711,8 @@ try {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `${CLS.btn} ${CLS.holdSpeed}`;
-    btn.title = "按住临时倍速（松开恢复）";
-    btn.setAttribute("aria-label", btn.title);
+    // v1.0.8: 只用 aria-label（避免原生+自定义双 tooltip）
+    btn.setAttribute("aria-label", "按住临时倍速（松开恢复）");
     btn.innerHTML = SVG_HOLD_SPEED;
 
     let holding = false;
@@ -755,8 +808,8 @@ try {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `${CLS.btn} ${CLS.adjustSpeed}`;
-    btn.title = "调整倍速（左键或右键）";
-    btn.setAttribute("aria-label", btn.title);
+    // v1.0.8: 只用 aria-label
+    btn.setAttribute("aria-label", "调整倍速（左键或右键）");
     btn.setAttribute("aria-haspopup", "menu");
     btn.setAttribute("aria-expanded", "false");
     btn.innerHTML = SVG_ADJUST_SPEED;
@@ -806,6 +859,12 @@ try {
     const speeds = this.settings.customSpeeds;
     const menuItems: HTMLButtonElement[] = [];
 
+    // v1.0.8: 菜单头部（"倍速"标题）
+    const header = document.createElement("div");
+    header.className = CLS.menuHeader;
+    header.textContent = "倍速";
+    menu.appendChild(header);
+
     if (speeds.length === 0) {
       const empty = document.createElement("div");
       empty.className = `${CLS.menuItem} mse-menu-item--empty`;
@@ -836,6 +895,7 @@ try {
         item.appendChild(checkSpan);
 
         const label = document.createElement("span");
+        label.className = CLS.menuSpeed;
         label.textContent = `${formatRate(speed)}×`;
         item.appendChild(label);
 
