@@ -82,8 +82,7 @@ const SVG_CHEVRON_DOWN = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="ht
 
 interface ToolbarCleanup {
   toolbar: HTMLElement;
-  anchorWrap: HTMLElement;
-  controlsWrap: HTMLElement; // v1.0.3: 新增 — controls-wrap 容器
+  controlsWrap: HTMLElement;
   cleanups: Array<() => void>;
 }
 
@@ -383,7 +382,6 @@ try {
     if (existing) {
       if (
         existing.toolbar.isConnected &&
-        existing.anchorWrap.isConnected &&
         existing.controlsWrap.isConnected
       ) {
         return; // 有效，无需重复注入
@@ -507,9 +505,7 @@ try {
     const controlsWrap = document.createElement("div");
     controlsWrap.className = CLS.controlsWrap;
 
-    // P1-8: anchor 单独包装，始终可见，最左侧
-    const anchorWrap = document.createElement("div");
-    anchorWrap.className = CLS.anchorWrap;
+    // v1.0.10: 移除 anchor-wrap div，直接把 anchor 按钮放进 controls-wrap
 
     // toolbar 包含其余按钮（默认收起，hover wrap 时展开动画）
     const { toolbar, leftCluster } = this.createToolbarSkeleton();
@@ -523,9 +519,7 @@ try {
     const hold = this.createHoldSpeedButton(mediaEl);
     // v1.0.9: 删除独立 adjust-speed 按钮——功能已合并到 anchor（点击/右键 anchor 打开倍速菜单）
 
-    // anchor 独立放在自己的 wrap
-    anchorWrap.appendChild(anchor.btn);
-
+    // v1.0.10: 直接把 anchor 按钮放进 controls-wrap（移除多余的 anchor-wrap div）
     // 3 个 hover 按钮放在 toolbar
     leftCluster.appendChild(skipBack.btn);
     leftCluster.appendChild(skipForward.btn);
@@ -534,7 +528,7 @@ try {
     toolbar.appendChild(leftCluster);
 
     // 把 anchor + toolbar 一起放进 controls-wrap
-    controlsWrap.appendChild(anchorWrap);
+    controlsWrap.appendChild(anchor.btn);
     controlsWrap.appendChild(toolbar);
 
     container.appendChild(controlsWrap);
@@ -543,7 +537,6 @@ try {
 
     const cleanupEntry: ToolbarCleanup = {
       toolbar,
-      anchorWrap,
       controlsWrap,
       cleanups: [
         anchor.cleanups,
