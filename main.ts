@@ -43,16 +43,18 @@ const CLS = {
   container: "mse-container",
   toolbar: "mse-toolbar",
   toolbarAutoHide: "mse-toolbar-auto-hide",
-  anchorWrap: "mse-anchor-wrap", // v1.0.8: 已废弃，保留仅为兼容
+  anchorWrap: "mse-anchor-wrap", // v1.0.8+: anchor 容器 div（无样式）
   controlsWrap: "mse-controls-wrap", // v1.0.3+: anchor + toolbar 整体容器
   clusterLeft: "mse-cluster mse-cluster-left",
   clusterRight: "mse-cluster mse-cluster-right",
   btn: "mse-btn",
   anchor: "mse-anchor",
+  anchorSpeed: "mse-anchor-speed", // v1.0.9: speed 文本 span
+  anchorIcon: "mse-anchor-icon", // v1.0.9: 下拉图标 span
   skipBack: "mse-skip-back",
   skipForward: "mse-skip-forward",
   holdSpeed: "mse-hold-speed",
-  adjustSpeed: "mse-adjust-speed",
+  // v1.0.9: 删除了 adjustSpeed（功能合并到 anchor）
   active: "is-active",
   menu: "mse-menu",
   menuHeader: "mse-menu-header",
@@ -69,9 +71,10 @@ const SVG_FORWARD_10 = `<svg viewBox="0 0 24 24" width="18" height="18" fill="cu
 
 const SVG_HOLD_SPEED = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4 18l8.5-6L4 6v12zM13 6v12l8.5-6L13 6z"/></svg>`;
 
-const SVG_ADJUST_SPEED = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>`;
-
 const SVG_CHECK = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
+
+// v1.0.9: chevron-down 小图标，用于 anchor 按钮右侧提示"可下拉"
+const SVG_CHEVRON_DOWN = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>`;
 
 // ----------------------------------------------------------------------------
 // 类型
@@ -518,42 +521,25 @@ try {
     const skipBack = this.createSkipButton(mediaEl, "back");
     const skipForward = this.createSkipButton(mediaEl, "forward");
     const hold = this.createHoldSpeedButton(mediaEl);
-    const adjust = this.createAdjustSpeedButton(mediaEl);
+    // v1.0.9: 删除独立 adjust-speed 按钮——功能已合并到 anchor（点击/右键 anchor 打开倍速菜单）
 
     // anchor 独立放在自己的 wrap
     anchorWrap.appendChild(anchor.btn);
 
-    // 所有按钮统一放在左侧 cluster
+    // 3 个 hover 按钮放在 toolbar
     leftCluster.appendChild(skipBack.btn);
     leftCluster.appendChild(skipForward.btn);
     leftCluster.appendChild(hold.btn);
-    leftCluster.appendChild(adjust.btn);
 
     toolbar.appendChild(leftCluster);
 
-    // v1.0.3: 把 anchor + toolbar 一起放进 controls-wrap
+    // 把 anchor + toolbar 一起放进 controls-wrap
     controlsWrap.appendChild(anchorWrap);
     controlsWrap.appendChild(toolbar);
 
     container.appendChild(controlsWrap);
 
-    // v1.0.8: ResizeObserver 同步 controls-wrap 实际宽度到 CSS 变量，
-    // 让 audio 的 margin-left 精确跟随，避免按钮和原生控件之间的间隙
-    let rafId: number | null = null;
-    const updateControlsWidth = () => {
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        const w = controlsWrap.getBoundingClientRect().width;
-        if (w > 0) {
-          container.style.setProperty("--mse-controls-width", `${w}px`);
-        }
-      });
-    };
-    const ro = new ResizeObserver(updateControlsWidth);
-    ro.observe(controlsWrap);
-    // 初次触发
-    updateControlsWidth();
+    // v1.0.9: 不再用 ResizeObserver，回归硬编码 :has() 选择器，动画更稳定
 
     const cleanupEntry: ToolbarCleanup = {
       toolbar,
@@ -564,14 +550,7 @@ try {
         skipBack.cleanups,
         skipForward.cleanups,
         hold.cleanups,
-        adjust.cleanups,
         () => {
-          ro.disconnect();
-          if (rafId !== null) {
-            cancelAnimationFrame(rafId);
-            rafId = null;
-          }
-          container.style.removeProperty("--mse-controls-width");
           container.classList.remove(CLS.container);
           if (forcedRelative) {
             container.style.position = "";
@@ -607,25 +586,32 @@ try {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `${CLS.btn} ${CLS.anchor}`;
-    // v1.0.8: 只用 aria-label（Obsidian 自定义 tooltip 会用它），
-    // 不再设 title 避免原生 + 自定义双 tooltip
     btn.setAttribute("aria-label", "当前倍速（点击打开倍速菜单）");
     btn.setAttribute("aria-haspopup", "menu");
 
+    // v1.0.9: 合并 speed 文本 + 下拉图标到一个圆角矩形按钮
+    const speedSpan = document.createElement("span");
+    speedSpan.className = CLS.anchorSpeed;
+    speedSpan.textContent = `${formatRate(mediaEl.playbackRate)}×`;
+    btn.appendChild(speedSpan);
+
+    const iconSpan = document.createElement("span");
+    iconSpan.className = CLS.anchorIcon;
+    iconSpan.innerHTML = SVG_CHEVRON_DOWN; // ▼ 小图标
+    btn.appendChild(iconSpan);
+
     const renderSpeed = () => {
-      btn.textContent = `${formatRate(mediaEl.playbackRate)}×`;
+      speedSpan.textContent = `${formatRate(mediaEl.playbackRate)}×`;
     };
-    renderSpeed();
 
     const bag = new ListenerBag();
-    // v1.0.8: anchor 点击直接打开倍速菜单（用户希望"为什么是按钮"——给它一个清晰功能）
+    // v1.0.9: anchor 点击/右键直接打开倍速菜单（替代独立的 adjust-speed 按钮）
     const openMenu = (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
       this.showAdjustMenu(mediaEl, btn);
     };
 
-    // v1.0.8: 全局倍速同步——ratechange 时如果开启，把当前 rate 广播给所有媒体
     const onRateChange = () => {
       renderSpeed();
       if (this.settings.globalSync) {
@@ -801,30 +787,7 @@ try {
     };
   }
 
-  /**
-   * 调整倍速按钮（P1-9 修复：ARIA 属性）
-   */
-  private createAdjustSpeedButton(mediaEl: HTMLMediaElement): ButtonResult {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `${CLS.btn} ${CLS.adjustSpeed}`;
-    // v1.0.8: 只用 aria-label
-    btn.setAttribute("aria-label", "调整倍速（左键或右键）");
-    btn.setAttribute("aria-haspopup", "menu");
-    btn.setAttribute("aria-expanded", "false");
-    btn.innerHTML = SVG_ADJUST_SPEED;
-
-    const bag = new ListenerBag();
-    const open = (e: Event) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.showAdjustMenu(mediaEl, btn);
-    };
-    bag.add(btn, "click", open);
-    bag.add(btn, "contextmenu", open);
-
-    return { btn, cleanups: [() => bag.clear()] };
-  }
+  // v1.0.9: 删除了独立的 createAdjustSpeedButton——功能已合并到 anchor 按钮
 
   // ------------------------------------------------------------------
   // 调整倍速菜单（P1-1, P1-2, P1-3, P1-9 修复）
