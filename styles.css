@@ -1,25 +1,42 @@
 /* ===========================================================================
-   Media Speed Enhancer — 极简样式
+   Media Speed Enhancer — v1.0.2 极简样式
    - 不替换 / 不修改原生 HTML5 播放器样式
-   - 仅在 media 元素祖先容器上叠加两个浮动元素：anchor 包装 + 工具栏
+   - 容器改为 flex 布局，按钮作为 flex 子项放在 audio/video 左侧外
+   - audio/video 让出 168px 左侧宽度给按钮，避免悬浮遮挡原生控制条
    - 使用 Obsidian CSS 变量，自动适配 light / dark / 自定义主题
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
-   容器标记：用于触发工具栏的 hover 显示
+   容器标记：flex 布局，让按钮与 audio/video 垂直居中并排
    --------------------------------------------------------------------------- */
 .mse-container {
-  /* 仅为锚点，确保工具栏 / anchor 包装的 absolute 定位有参照 */
+  display: flex;
+  align-items: center;
+  position: relative; /* 兜底：祖先没有 relative 时给个参照 */
+  flex-wrap: nowrap;
 }
 
 /* ---------------------------------------------------------------------------
-   Anchor 包装（P1-8：始终可见，与 toolbar 分开）
+   关键：原生 audio/video 让出左侧 168px 给按钮（anchor ~64px + toolbar ~96px + 间距 8px）
+   display: inline-block 保证与 flex 子项水平对齐；vertical-align: middle 兜底
+   --------------------------------------------------------------------------- */
+.mse-container audio,
+.mse-container video {
+  width: calc(100% - 168px) !important;
+  max-width: 100%;
+  display: inline-block;
+  vertical-align: middle;
+  flex: 0 1 auto;
+  min-width: 0; /* flex 子项允许缩到 0，避免溢出 */
+}
+
+/* ---------------------------------------------------------------------------
+   Anchor 包装（v1.0.2 重构：作为 flex 子项放在最左侧，垂直居中）
    --------------------------------------------------------------------------- */
 .mse-anchor-wrap {
-  position: absolute;
-  top: -38px; /* v1.0.1 hotfix: 移到容器外顶部，避免遮挡原生控制条 */
-  left: 8px;
+  position: relative; /* v1.0.2: flex 子项，不需要 absolute */
   z-index: 51;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   padding: 4px;
@@ -31,41 +48,38 @@
   -webkit-backdrop-filter: blur(4px);
   opacity: 1 !important; /* 始终可见 */
   pointer-events: auto;
+  margin-right: 8px; /* 与 toolbar 之间的间距 */
 }
 
 /* ---------------------------------------------------------------------------
-   工具栏（覆盖在媒体元素之上，P1-8：放在 anchor 包装右侧）
+   工具栏（v1.0.2 重构：flex 子项，紧跟 anchor 右侧）
    --------------------------------------------------------------------------- */
 .mse-toolbar {
-  position: absolute;
-  top: -38px; /* v1.0.1 hotfix: 移到容器外顶部，与 anchor 同一行 */
-  left: 64px; /* 避开 anchor 包装 (~56px + 8px 间距) */
-  right: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
+  position: relative; /* v1.0.2: flex 子项，不需要 absolute */
   z-index: 50;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  flex-shrink: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;
   opacity: 1;
 }
 
-/* auto-hide：默认隐藏；hover 容器 / toolbar / anchor 包装时显示 */
+/* auto-hide：默认隐藏；hover 容器时显示 */
 .mse-toolbar.mse-toolbar-auto-hide {
   opacity: 0;
 }
-/* v1.0.1 hotfix: 工具栏在容器外顶部，扩展 hover 触发区域 */
 .mse-container:hover > .mse-toolbar.mse-toolbar-auto-hide,
-.mse-container:hover > .mse-anchor-wrap,
-.mse-toolbar.mse-toolbar-auto-hide:hover,
-.mse-anchor-wrap:hover ~ .mse-toolbar.mse-toolbar-auto-hide,
-.mse-container:focus-within > .mse-toolbar.mse-toolbar-auto-hide,
-.mse-container:focus-within > .mse-anchor-wrap {
+.mse-container:focus-within > .mse-toolbar.mse-toolbar-auto-hide {
   opacity: 1;
 }
 
-/* 集群（左右两组） */
+/* ---------------------------------------------------------------------------
+   集群（v1.0.2：仅保留左集群，右集群完全移除）
+   --------------------------------------------------------------------------- */
 .mse-toolbar .mse-cluster {
   display: flex;
   align-items: center;
@@ -80,16 +94,21 @@
   pointer-events: auto;
 }
 
+/* 右集群彻底不渲染（v1.0.2） */
+.mse-cluster-right {
+  display: none !important;
+}
+
 /* ---------------------------------------------------------------------------
-   通用按钮
+   通用按钮（v1.0.2：更紧凑）
    --------------------------------------------------------------------------- */
 .mse-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 32px;
-  height: 26px;
-  padding: 0 6px;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 4px;
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
@@ -99,7 +118,9 @@
   font-family: inherit;
   user-select: none;
   -webkit-user-select: none;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease,
+              border-color 0.12s ease, outline-color 0.12s ease,
+              transform 0.1s ease;
 }
 
 /* SVG 图标尺寸 */
@@ -112,6 +133,8 @@
 .mse-btn:hover {
   background: var(--background-modifier-hover, rgba(127, 127, 127, 0.18));
   color: var(--text-normal, #ddd);
+  outline: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.35));
+  outline-offset: -1px;
 }
 
 .mse-btn:active,
@@ -126,7 +149,7 @@
   outline-offset: 1px;
 }
 
-/* Anchor 按钮：稍宽，显示当前倍速文本 */
+/* Anchor 按钮：稍宽，显示当前倍速文本（如 1.0×） */
 .mse-anchor {
   min-width: 48px;
   font-variant-numeric: tabular-nums;
@@ -134,9 +157,12 @@
   color: var(--text-normal, #ddd);
 }
 
-/* 按住倍速激活态：加亮 + 微缩 */
+/* 按住倍速激活态：v1.0.2 改为加亮 + scale(1.05)（更明显的反馈） */
 .mse-hold-speed.is-active {
-  transform: scale(0.95);
+  background: var(--interactive-accent, rgba(120, 160, 220, 0.28));
+  color: var(--text-on-accent, #fff);
+  border-color: var(--interactive-accent, rgba(120, 160, 220, 0.5));
+  transform: scale(1.05);
 }
 
 /* ---------------------------------------------------------------------------
@@ -217,33 +243,39 @@
 }
 
 /* ---------------------------------------------------------------------------
-   小屏适配
+   小屏适配（v1.0.2：让出宽度缩到 140px，按钮 padding 缩小）
    --------------------------------------------------------------------------- */
 @media (max-width: 480px) {
+  .mse-container audio,
+  .mse-container video {
+    width: calc(100% - 140px) !important;
+  }
+
   .mse-anchor-wrap {
-    top: -34px; /* v1.0.1 hotfix */
-    left: 4px;
     padding: 3px;
+    margin-right: 6px;
   }
+
   .mse-toolbar {
-    top: -34px; /* v1.0.1 hotfix */
-    left: 56px;
-    right: 4px;
-    gap: 4px;
+    gap: 3px;
   }
+
   .mse-toolbar .mse-cluster {
     padding: 3px;
     gap: 2px;
   }
+
   .mse-btn {
-    min-width: 28px;
+    min-width: 26px;
     height: 22px;
-    padding: 0 4px;
+    padding: 0 3px;
   }
+
   .mse-btn svg {
     width: 14px;
     height: 14px;
   }
+
   .mse-anchor {
     min-width: 40px;
   }

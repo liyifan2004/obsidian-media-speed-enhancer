@@ -10,18 +10,19 @@ import {
 // 关键设计决策 / Critical Design Decisions
 // ============================================================================
 //
-// 1. 覆盖层工具栏（Overlay Toolbar）方案
+// 1. Flex 侧栏方案（v1.0.2 重构）
 //    原生 HTML5 `<audio controls>` / `<video controls>` 的控制条由浏览器渲染在
-//    **Shadow DOM** 中，无法从外部 JS 访问其内部按钮 DOM（Web 规范决定）。
-//    因此本插件不尝试注入原生控制条，而是叠加一个绝对定位的工具栏。
+//    Shadow DOM 中，无法从外部 JS 访问内部按钮 DOM（Web 规范决定）。
+//    v1.0.2 改为：容器 flex 布局，按钮作为 flex 子项放在 audio/video 左侧外，
+//    audio/video 宽度让出 168px，按钮不再悬浮遮挡原生控制条。
 //
-// 2. Anchor 单独容器（P1-8 修复后）
-//    Anchor 按钮（当前倍速徽标）从 toolbar 中独立出来，放到 .mse-anchor-wrap，
-//    始终 opacity:1；toolbar 只包含其余 3-4 个按钮，hover 时才显示。
+// 2. Anchor 单独容器（P1-8 修复后，v1.0.2 沿用）
+//    Anchor 按钮（当前倍速徽标）始终可见（opacity:1），格式如 "1.0×"。
 //
 // 3. 注入生命周期
-//    - MutationObserver 监听 document.body / workspace 根容器
-//    - WeakMap<HTMLMediaElement, ToolbarCleanup>：支持同一元素被重渲染后的重新挂载（P1-10）
+//    - MutationObserver 监听 document.body / workspace 根容器（递归扫描内部 media）
+//    - 启动后 30 秒内每 2 秒轮询兜底（修复新插入音频被漏掉的情况）
+//    - WeakMap<HTMLMediaElement, ToolbarCleanup>：支持重渲染后的重新挂载（P1-10）
 //    - Set<ToolbarCleanup>：用于 onunload 时遍历清理
 //    - showButtons 变更触发 refreshAllToolbars() 动态增删（P1-5）
 //
@@ -30,6 +31,13 @@ import {
 // ----------------------------------------------------------------------------
 // 常量
 // ----------------------------------------------------------------------------
+
+/** v1.0.2: 让 audio/video 让出的左侧宽度（像素），用于 inline style 兜底 */
+const BUTTON_AREA_WIDTH = 168;
+/** v1.0.2: 轮询兜底时长（毫秒） */
+const POLLING_DURATION_MS = 30_000;
+/** v1.0.2: 轮询间隔（毫秒） */
+const POLLING_INTERVAL_MS = 2_000;
 
 const CLS = {
   container: "mse-container",
@@ -140,6 +148,8 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   /** 用于 onunload 遍历清理（WeakMap 不可迭代） */
   private allCleanups: Set<ToolbarCleanup> = new Set();
   private openMenu: OpenMenu | null = null;
+  /** v1.0.2: 轮询兜底 timer（启动后 30s 内每 2s 全量扫描一次，捕获 MutationObserver 漏掉的动态插入） */
+  private pollingTimer: number | null = null;
 
   // ------------------------------------------------------------------
   // 生命周期
@@ -156,21 +166,9 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     this.addSettingTab(new MediaSpeedEnhancerSettingTab(this.app, this));
 
     // P1-4: observer 回调中对每个节点 try/catch，单点异常不影响后续节点
+    // v1.0.2: 重写为 handleMutations，新增对节点内嵌套 media 的递归扫描
     this.observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of Array.from(mutation.addedNodes)) {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            try {
-              this.scanAndInject(node as Element);
-            } catch (e) {
-              console.warn(
-                "[media-speed-enhancer] observer scan error:",
-                e
-              );
-            }
-          }
-        }
-      }
+      this.handleMutations(mutations);
     });
 
     this.observer.observe(document.body, { childList: true, subtree: true });
@@ -189,6 +187,9 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
 
     this.scanAndInject(document.body);
 
+    // v1.0.2: 启动轮询兜底，捕获 MutationObserver 漏掉的动态媒体插入
+    this.startPollingFallback();
+
     console.log("[media-speed-enhancer] loaded");
   }
 
@@ -197,6 +198,12 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     if (this.observer) {
       this.observer.disconnect();
       this.observer = null;
+    }
+
+    // 1.5 v1.0.2: 清理轮询兜底 timer
+    if (this.pollingTimer !== null) {
+      window.clearTimeout(this.pollingTimer);
+      this.pollingTimer = null;
     }
 
     // 2. 关闭菜单（含 clearTimeout + 焦点恢复 + ARIA 复位）
@@ -286,6 +293,74 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   // ------------------------------------------------------------------
   // 扫描 + 注入
   // ------------------------------------------------------------------
+
+  /**
+   * v1.0.2: MutationObserver 回调。
+   * - 对每个 added node 自身如果是 media 则注入
+   * - 递归扫描新节点内嵌套的 audio/video（防止父容器被整体替换时漏掉）
+   */
+  private handleMutations(mutations: MutationRecord[]): void {
+    for (const mutation of mutations) {
+      for (const node of Array.from(mutation.addedNodes)) {
+        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+        const el = node as HTMLElement;
+        try {
+          this.scanAndInject(el);
+          // 关键：递归扫描新节点内部所有 audio/video
+          const innerMedia = el.querySelectorAll("audio, video");
+          for (const m of Array.from(innerMedia)) {
+            try {
+              this.scanAndInject(m.parentElement || (m as HTMLElement));
+            } catch (e) {
+              console.warn("[media-speed-enhancer]", e);
+            }
+          }
+        } catch (e) {
+          console.warn("[media-speed-enhancer] observer scan error:", e);
+        }
+      }
+    }
+  }
+
+  /**
+   * v1.0.2: 全量扫描所有 media 元素并尝试注入。
+   * 用于轮询兜底和 refreshAllToolbars 重新注入路径。
+   */
+  private scanAllMedia(): void {
+    const allMedia = document.querySelectorAll("audio, video");
+    for (const m of Array.from(allMedia)) {
+      try {
+        this.tryInject(m as HTMLMediaElement);
+      } catch (e) {
+        console.warn("[media-speed-enhancer] scanAllMedia error:", e);
+      }
+    }
+  }
+
+  /**
+   * v1.0.2: 启动轮询兜底。启动后 POLLING_DURATION_MS 毫秒内每 POLLING_INTERVAL_MS 毫秒
+   * 执行一次 scanAllMedia()，捕获 MutationObserver 漏掉的动态媒体插入。
+   * 结束后自动停止；onunload 中通过 clearTimeout 清理。
+   */
+  private startPollingFallback(): void {
+    let count = 0;
+    const maxPolls = Math.ceil(POLLING_DURATION_MS / POLLING_INTERVAL_MS);
+    const poll = () => {
+      try {
+        this.scanAllMedia();
+      } catch (e) {
+        console.warn("[media-speed-enhancer] polling error:", e);
+      }
+      count++;
+      if (count < maxPolls) {
+        this.pollingTimer = window.setTimeout(poll, POLLING_INTERVAL_MS);
+      } else {
+        this.pollingTimer = null;
+      }
+    };
+    // 立即先跑一次，然后进入定时循环
+    poll();
+  }
 
   private scanAndInject(root: Element | Document): void {
     if (root instanceof HTMLMediaElement) {
@@ -428,12 +503,19 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     // v1.0.1 hotfix: 强制祖先链 overflow: visible，避免工具栏被裁剪
     this.ensureAncestorsVisible(mediaEl);
 
+    // v1.0.2: 强制 audio/video 元素宽度让出左侧按钮空间（兜底 CSS）
+    mediaEl.style.width = `calc(100% - ${BUTTON_AREA_WIDTH}px)`;
+    mediaEl.style.display = "inline-block";
+    mediaEl.style.verticalAlign = "middle";
+    mediaEl.style.flexShrink = "1";
+    mediaEl.style.minWidth = "0";
+
     // P1-8: anchor 单独包装，始终可见
     const anchorWrap = document.createElement("div");
     anchorWrap.className = CLS.anchorWrap;
 
-    // toolbar 包含其余按钮（hover 显示）
-    const { toolbar, leftCluster, rightCluster } = this.createToolbarSkeleton();
+    // toolbar 包含其余按钮（hover 显示）。v1.0.2: 仅保留左 cluster
+    const { toolbar, leftCluster } = this.createToolbarSkeleton();
     if (this.settings.toolbarAutoHide) {
       toolbar.classList.add(CLS.toolbarAutoHide);
     }
@@ -447,20 +529,13 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     // anchor 独立放在自己的 wrap
     anchorWrap.appendChild(anchor.btn);
 
-    // 其他按钮按位置规则放 toolbar
+    // v1.0.2: 所有按钮统一放在左侧 cluster（删除 adjustSpeedButtonPosition 分支）
     leftCluster.appendChild(skipBack.btn);
     leftCluster.appendChild(skipForward.btn);
     leftCluster.appendChild(hold.btn);
-
-    if (this.settings.adjustSpeedButtonPosition === "after-hold-speed") {
-      leftCluster.appendChild(adjust.btn);
-      rightCluster.style.display = "none";
-    } else {
-      rightCluster.appendChild(adjust.btn);
-    }
+    leftCluster.appendChild(adjust.btn);
 
     toolbar.appendChild(leftCluster);
-    toolbar.appendChild(rightCluster);
 
     container.appendChild(anchorWrap);
     container.appendChild(toolbar);
@@ -479,6 +554,12 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
           if (forcedRelative) {
             container.style.position = "";
           }
+          // v1.0.2: 还原 audio/video 元素的 inline style
+          mediaEl.style.removeProperty("width");
+          mediaEl.style.removeProperty("display");
+          mediaEl.style.removeProperty("vertical-align");
+          mediaEl.style.removeProperty("flex-shrink");
+          mediaEl.style.removeProperty("min-width");
         },
       ].flat(),
     };
@@ -486,10 +567,12 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     this.injectedMap.set(mediaEl, cleanupEntry);
   }
 
+  /**
+   * v1.0.2: 仅创建 toolbar + 左 cluster；右 cluster 不再创建。
+   */
   private createToolbarSkeleton(): {
     toolbar: HTMLElement;
     leftCluster: HTMLElement;
-    rightCluster: HTMLElement;
   } {
     const toolbar = document.createElement("div");
     toolbar.className = CLS.toolbar;
@@ -497,10 +580,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     const leftCluster = document.createElement("div");
     leftCluster.className = CLS.clusterLeft;
 
-    const rightCluster = document.createElement("div");
-    rightCluster.className = CLS.clusterRight;
-
-    return { toolbar, leftCluster, rightCluster };
+    return { toolbar, leftCluster };
   }
 
   // ------------------------------------------------------------------
@@ -982,7 +1062,17 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
 // 工具函数
 // ----------------------------------------------------------------------------
 
+/**
+ * v1.0.2: 倍速格式化 — 保留至少 1 位小数，让 1.0 显示为 "1.0"（与 "×" 组合为 "1.0×"）。
+ * 例如：1.0 → "1.0"，1.25 → "1.25"，0.5 → "0.5"，3 → "3.0"
+ */
 function formatRate(rate: number): string {
-  if (!Number.isFinite(rate)) return "1";
-  return (Math.round(rate * 1000) / 1000).toString();
+  if (!Number.isFinite(rate)) return "1.0";
+  const rounded = Math.round(rate * 1000) / 1000;
+  // 用 toFixed(2) 保留两位，然后去掉末尾的 0 但至少保留 1 位小数
+  const s = rounded.toFixed(2);
+  if (s.endsWith("0")) {
+    return s.slice(0, -1); // "1.00" → "1.0", "0.50" → "0.5"
+  }
+  return s;
 }

@@ -6,15 +6,15 @@ import type MediaSpeedEnhancerPlugin from "./main";
  * - tempSpeed: 按住倍速按钮触发时的临时 playbackRate
  * - customSpeeds: 调整倍速菜单中可选的永久倍速列表
  * - showButtons: 总开关；关闭则不再注入任何按钮
- * - adjustSpeedButtonPosition: "调整倍速"按钮在工具栏内的相对位置
  * - enableTouchOptimization: 启用 pointer events 适配触屏；关闭则只绑 mousedown/mouseup
  * - toolbarAutoHide: 工具栏是否在 hover media 时自动显示；关闭则常驻
+ *
+ * v1.0.2: 移除 `adjustSpeedButtonPosition`（v1.0.2 重构后所有按钮统一左侧）
  */
 export interface MediaSpeedEnhancerSettings {
   tempSpeed: number;
   customSpeeds: number[];
   showButtons: boolean;
-  adjustSpeedButtonPosition: "after-volume" | "after-hold-speed";
   enableTouchOptimization: boolean;
   toolbarAutoHide: boolean;
 }
@@ -23,7 +23,6 @@ export const DEFAULT_SETTINGS: MediaSpeedEnhancerSettings = {
   tempSpeed: 2.0,
   customSpeeds: [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0],
   showButtons: true,
-  adjustSpeedButtonPosition: "after-volume",
   enableTouchOptimization: true,
   toolbarAutoHide: true,
 };
@@ -150,26 +149,6 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
             this.plugin.settings.showButtons = value;
             await this.plugin.saveSettings();
             await this.plugin.refreshAllToolbars();
-          })
-      );
-
-    // --- 调整倍速按钮位置 ---
-    new Setting(containerEl)
-      .setName("『调整倍速』按钮位置")
-      .setDesc(
-        "覆盖层方案下：'after-volume' = 工具栏最右侧；'after-hold-speed' = 按住倍速按钮之后（倒数第二个）。"
-      )
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOption("after-volume", "工具栏最右侧（默认）")
-          .addOption("after-hold-speed", "按住倍速按钮之后")
-          .setValue(this.plugin.settings.adjustSpeedButtonPosition)
-          .onChange(async (value) => {
-            if (value === "after-volume" || value === "after-hold-speed") {
-              this.plugin.settings.adjustSpeedButtonPosition = value;
-              await this.plugin.saveSettings();
-              await this.plugin.refreshAllToolbars();
-            }
           })
       );
 

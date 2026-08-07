@@ -41,31 +41,38 @@
 | **临时倍速数值** | 按住『按住倍速』按钮时使用的 playbackRate，0.25 - 4.0 | `2.0` |
 | **自定义倍速列表** | 每行一个倍速数字，例如 `1.5\n1.75\n2.0`。会自动去重、过滤非法值、升序排序 | `[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0]` |
 | **显示按钮** | 总开关。关闭后不注入按钮，但 MutationObserver 仍运行以避免漏掉新元素 | `true` |
-| **『调整倍速』按钮位置** | `after-volume`（默认，工具栏最右侧）/ `after-hold-speed`（紧跟在按住倍速之后） | `after-volume` |
 | **启用触摸优化** | 开启时使用 pointer events 适配触屏；关闭时仅绑 mousedown/mouseup | `true` |
 | **工具栏自动隐藏** | 开启时 hover 媒体元素才展开；关闭则常驻显示 | `true` |
 
+> v1.0.2 起：所有按钮统一放置在原生控件**左侧**（挤占 audio 宽度让出 168px），不再提供"调整倍速按钮位置"选项。
+
 ## 关键技术说明
 
-### 为什么是覆盖层而不是注入原生控制条？
+### 为什么是侧栏（flex 布局）而不是覆盖层？
 
 原生 HTML5 `<audio controls>` / `<video controls>` 的控制条由浏览器渲染在 **Shadow DOM** 中，
 外部 JS 无法访问其内部 DOM。这是 Web 规范决定的，与 Obsidian 无关。
-社区里类似的插件（如 Media Extended、Auto-play Media Settings）都采用覆盖层方案。
 
-本插件在媒体元素的祖先容器（`.internal-embed`、`.video-container`、父元素等）上
-叠加一个绝对定位的 `<div class="mse-toolbar">`。这样：
+v1.0.2 之前本插件用绝对定位的工具栏悬浮在原生控制条**上方**，常遮挡上方文字。
+v1.0.2 重构：所有按钮（anchor 倍速徽标 + 4 个工具栏按钮）统一作为 **flex 子项**
+放在 `audio`/`video` 元素的**左侧外**，与 audio 垂直居中。`audio`/`video` 元素
+本身宽度收缩到 `calc(100% - 168px)`，给按钮让出 168px 空间。这样：
 
 - 完全不修改 / 不替换原生播放器
+- 不再遮挡原生控制条上方内容
 - 自动适配 Obsidian 主题（使用 CSS 变量）
 - 不引入任何第三方播放器库
 
-### MutationObserver
+### MutationObserver + 轮询兜底
 
 监听 `document.body` 和 `app.workspace.containerEl` 的 subtree/childList 变化，
-对新出现的 `<audio>` / `<video>` 自动注入工具栏。
-使用 `WeakSet` 标记已注入元素，避免重复。
+对新出现的 `<audio>` / `<video>` 自动注入工具栏，并对新增节点**内部**嵌套的 media
+递归扫描（防止父容器整体替换时漏掉）。
+使用 `WeakMap` 跟踪已注入元素，支持重渲染后的重新挂载。
 跳过的目标：在 iframe 中（YouTube 等第三方嵌入）、不在 Obsidian 内容区内的媒体元素。
+
+启动后 30 秒内每 2 秒执行一次全量扫描（`scanAllMedia`），作为 MutationObserver
+漏掉动态媒体插入时的兜底。
 
 ## 已知限制
 
