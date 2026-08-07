@@ -31,8 +31,7 @@
 
 /* hover 时：anchor(64) + 3 按钮(96) + 2 gaps(8) + 间距(8) = 176 */
 .mse-container:has(.mse-controls-wrap:hover) audio,
-.mse-container:has(.mse-controls-wrap:focus-within) audio,
-.mse-container:has(.mse-controls-wrap:focus-within) video {
+.mse-container:has(.mse-controls-wrap:hover) video {
   margin-left: 180px;
   width: calc(100% - 180px);
 }
@@ -134,8 +133,7 @@
   transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.mse-controls-wrap:hover .mse-toolbar,
-.mse-controls-wrap:focus-within .mse-toolbar {
+.mse-controls-wrap:hover .mse-toolbar {
   max-width: 120px;
   pointer-events: auto;
 }
@@ -360,8 +358,7 @@
     width: calc(100% - 64px);
   }
   .mse-container:has(.mse-controls-wrap:hover) audio,
-  .mse-container:has(.mse-controls-wrap:focus-within) audio,
-  .mse-container:has(.mse-controls-wrap:focus-within) video {
+  .mse-container:has(.mse-controls-wrap:hover) video {
     margin-left: 152px;
     width: calc(100% - 152px);
   }
@@ -379,8 +376,7 @@
     width: 16px;
     height: 16px;
   }
-  .mse-controls-wrap:hover .mse-toolbar,
-  .mse-controls-wrap:focus-within .mse-toolbar {
+  .mse-controls-wrap:hover .mse-toolbar {
     max-width: 100px;
   }
   .mse-textarea {
