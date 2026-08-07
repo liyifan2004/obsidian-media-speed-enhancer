@@ -1,41 +1,61 @@
 /* ===========================================================================
-   Media Speed Enhancer — 极简样式（v1.0.6 重构）
-   方案：flex 让 audio 自动填满剩余空间，无需 absolute、无需固定高度
+   Media Speed Enhancer — v1.0.7 修复版
+   关键修复：
+   1. audio 选择器从 `>` 直接子改为后代（Obsidian DOM 结构嵌套）
+   2. controls-wrap absolute 定位（不占流空间）
+   3. audio 用 margin-left + width calc 实现平滑动画
+   4. audio 右端始终锚定容器右边缘
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
-   容器：flex 横向布局
+   容器：position: relative 让 absolute 子元素有定位参考
    --------------------------------------------------------------------------- */
 .mse-container {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex-wrap: nowrap;
-}
-
-/* ---------------------------------------------------------------------------
-   audio/video：flex 自动占满剩余空间（不设固定 width）
-   --------------------------------------------------------------------------- */
-.mse-container > audio,
-.mse-container > video {
-  flex: 1 1 0;
-  min-width: 0;
+  position: relative;
   display: block;
+  /* 高度由 audio 元素自然撑开（不强制 40px） */
 }
 
 /* ---------------------------------------------------------------------------
-   控件组（anchor + toolbar）：根据需要自动扩展宽度
+   原生 audio/video 元素：
+   - 默认：margin-left: 56px 让出 anchor 空间，width: calc(100% - 56px)
+   - hover：margin-left: 216px 让出 toolbar 空间，width: calc(100% - 216px)
+   - audio 右端 = 容器右边缘（margin + width 之和 = 容器宽度）
+   - 关键：使用后代选择器（不含 >），因为 Obsidian 嵌入结构是嵌套的
+   --------------------------------------------------------------------------- */
+.mse-container audio,
+.mse-container video {
+  display: block;
+  margin-left: 56px;
+  width: calc(100% - 56px);
+  transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mse-container:has(.mse-controls-wrap:hover) audio,
+.mse-container:has(.mse-controls-wrap:hover) video {
+  margin-left: 216px;
+  width: calc(100% - 216px);
+}
+
+/* ---------------------------------------------------------------------------
+   控件组（anchor + toolbar）：absolute 定位，悬浮在 audio 左侧
+   不占流空间，audio 的 width calc 不会受其影响
    --------------------------------------------------------------------------- */
 .mse-controls-wrap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
   display: flex;
   flex-direction: row;
   align-items: center;
-  flex: 0 0 auto;
-  gap: 0;
+  z-index: 2;
+  pointer-events: auto;
 }
 
 /* ---------------------------------------------------------------------------
-   Anchor 包装：始终可见，最左侧，透明背景
+   Anchor 包装：始终可见，最左侧
    --------------------------------------------------------------------------- */
 .mse-anchor-wrap {
   flex: 0 0 auto;
@@ -83,7 +103,7 @@
   pointer-events: auto;
 }
 
-/* 集群：透明，无背景框 */
+/* 集群 */
 .mse-toolbar .mse-cluster {
   display: flex;
   align-items: center;
@@ -98,7 +118,7 @@
 .mse-cluster-right { display: none !important; }
 
 /* ---------------------------------------------------------------------------
-   通用按钮：接近原生控制条
+   通用按钮：接近原生
    --------------------------------------------------------------------------- */
 .mse-btn {
   display: inline-flex;
@@ -138,15 +158,11 @@
   outline: 2px solid var(--interactive-accent, #5b9dd9);
   outline-offset: -2px;
 }
-
-/* Anchor 按钮：稍宽 */
 .mse-anchor {
   width: auto;
   min-width: 48px;
   border-radius: 4px;
 }
-
-/* 按住倍速激活态 */
 .mse-hold-speed.is-active {
   background: var(--interactive-accent, rgba(120, 160, 220, 0.45)) !important;
   color: var(--text-on-accent, #fff) !important;
@@ -223,6 +239,16 @@
    小屏
    --------------------------------------------------------------------------- */
 @media (max-width: 480px) {
+  .mse-container audio,
+  .mse-container video {
+    margin-left: 44px;
+    width: calc(100% - 44px);
+  }
+  .mse-container:has(.mse-controls-wrap:hover) audio,
+  .mse-container:has(.mse-controls-wrap:hover) video {
+    margin-left: 184px;
+    width: calc(100% - 184px);
+  }
   .mse-anchor-wrap {
     min-width: 40px;
     padding: 0 4px;

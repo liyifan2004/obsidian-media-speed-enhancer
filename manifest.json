@@ -1,7 +1,7 @@
 {
   "id": "media-speed-enhancer",
   "name": "Media Speed Enhancer",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "minAppVersion": "1.5.0",
   "description": "在原生 HTML5 播放器上增加 10s 跳转、按住倍速、自定义倍速切换等最小侵入式增强",
   "author": "李轶凡",
