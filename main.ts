@@ -44,6 +44,7 @@ const CLS = {
   toolbar: "mse-toolbar",
   toolbarAutoHide: "mse-toolbar-auto-hide",
   anchorWrap: "mse-anchor-wrap", // P1-8: 新增 — anchor 单独容器
+  controlsWrap: "mse-controls-wrap", // v1.0.3: 新增 — anchor + toolbar 的整体容器
   clusterLeft: "mse-cluster mse-cluster-left",
   clusterRight: "mse-cluster mse-cluster-right",
   btn: "mse-btn",
@@ -77,6 +78,7 @@ const SVG_CHECK = `<svg viewBox="0 0 24 24" width="14" height="14" fill="current
 interface ToolbarCleanup {
   toolbar: HTMLElement;
   anchorWrap: HTMLElement;
+  controlsWrap: HTMLElement; // v1.0.3: 新增 — controls-wrap 容器
   cleanups: Array<() => void>;
 }
 
@@ -218,13 +220,9 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
           console.warn("[media-speed-enhancer] toolbar cleanup error:", e);
         }
       }
+      // v1.0.3: controlsWrap 包含 anchorWrap + toolbar，移除它即清理两者
       try {
-        cleanup.toolbar.remove();
-      } catch {
-        /* ignore */
-      }
-      try {
-        cleanup.anchorWrap.remove();
+        cleanup.controlsWrap.remove();
       } catch {
         /* ignore */
       }
@@ -255,19 +253,15 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     if (!this.settings.showButtons) {
       for (const cleanup of this.allCleanups) {
         for (const fn of cleanup.cleanups) {
-          try {
+try {
             fn();
           } catch {
             /* ignore */
           }
         }
+        // v1.0.3: 移除 controlsWrap 一次性清理 anchor + toolbar
         try {
-          cleanup.toolbar.remove();
-        } catch {
-          /* ignore */
-        }
-        try {
-          cleanup.anchorWrap.remove();
+          cleanup.controlsWrap.remove();
         } catch {
           /* ignore */
         }
@@ -384,7 +378,8 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     if (existing) {
       if (
         existing.toolbar.isConnected &&
-        existing.anchorWrap.isConnected
+        existing.anchorWrap.isConnected &&
+        existing.controlsWrap.isConnected
       ) {
         return; // 有效，无需重复注入
       }
@@ -411,13 +406,9 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
         /* ignore */
       }
     }
+    // v1.0.3: controls-wrap 包含 anchorWrap + toolbar，移除 controlsWrap 自动清空
     try {
-      cleanup.toolbar.remove();
-    } catch {
-      /* ignore */
-    }
-    try {
-      cleanup.anchorWrap.remove();
+      cleanup.controlsWrap.remove();
     } catch {
       /* ignore */
     }
@@ -503,18 +494,19 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     // v1.0.1 hotfix: 强制祖先链 overflow: visible，避免工具栏被裁剪
     this.ensureAncestorsVisible(mediaEl);
 
-    // v1.0.2: 强制 audio/video 元素宽度让出左侧按钮空间（兜底 CSS）
-    mediaEl.style.width = `calc(100% - ${BUTTON_AREA_WIDTH}px)`;
-    mediaEl.style.display = "inline-block";
-    mediaEl.style.verticalAlign = "middle";
-    mediaEl.style.flexShrink = "1";
-    mediaEl.style.minWidth = "0";
+    // v1.0.3: 不再强制设置 mediaEl inline style，让 styles.css 的 flex+transition 处理
+    // 这样 audio 元素宽度变化可以平滑动画（hover wrap 时 width: calc(100% - 56px - 156px)）
 
-    // P1-8: anchor 单独包装，始终可见
+    // v1.0.3: 创建 controls-wrap 容器把 anchor + toolbar 包在一起，
+    // 这样 hover 任一都能触发展开动画
+    const controlsWrap = document.createElement("div");
+    controlsWrap.className = CLS.controlsWrap;
+
+    // P1-8: anchor 单独包装，始终可见，最左侧
     const anchorWrap = document.createElement("div");
     anchorWrap.className = CLS.anchorWrap;
 
-    // toolbar 包含其余按钮（hover 显示）。v1.0.2: 仅保留左 cluster
+    // toolbar 包含其余按钮（默认收起，hover wrap 时展开动画）
     const { toolbar, leftCluster } = this.createToolbarSkeleton();
     if (this.settings.toolbarAutoHide) {
       toolbar.classList.add(CLS.toolbarAutoHide);
@@ -529,7 +521,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     // anchor 独立放在自己的 wrap
     anchorWrap.appendChild(anchor.btn);
 
-    // v1.0.2: 所有按钮统一放在左侧 cluster（删除 adjustSpeedButtonPosition 分支）
+    // 所有按钮统一放在左侧 cluster
     leftCluster.appendChild(skipBack.btn);
     leftCluster.appendChild(skipForward.btn);
     leftCluster.appendChild(hold.btn);
@@ -537,12 +529,16 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
 
     toolbar.appendChild(leftCluster);
 
-    container.appendChild(anchorWrap);
-    container.appendChild(toolbar);
+    // v1.0.3: 把 anchor + toolbar 一起放进 controls-wrap
+    controlsWrap.appendChild(anchorWrap);
+    controlsWrap.appendChild(toolbar);
+
+    container.appendChild(controlsWrap);
 
     const cleanupEntry: ToolbarCleanup = {
       toolbar,
       anchorWrap,
+      controlsWrap, // v1.0.3: 用于清理
       cleanups: [
         anchor.cleanups,
         skipBack.cleanups,
@@ -554,12 +550,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
           if (forcedRelative) {
             container.style.position = "";
           }
-          // v1.0.2: 还原 audio/video 元素的 inline style
-          mediaEl.style.removeProperty("width");
-          mediaEl.style.removeProperty("display");
-          mediaEl.style.removeProperty("vertical-align");
-          mediaEl.style.removeProperty("flex-shrink");
-          mediaEl.style.removeProperty("min-width");
+          // v1.0.3: 不再需要清理 mediaEl inline style（CSS 处理）
         },
       ].flat(),
     };
@@ -568,7 +559,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   }
 
   /**
-   * v1.0.2: 仅创建 toolbar + 左 cluster；右 cluster 不再创建。
+   * v1.0.3: 仅创建 toolbar + 左 cluster；右 cluster 不再创建。
    */
   private createToolbarSkeleton(): {
     toolbar: HTMLElement;
