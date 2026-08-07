@@ -381,6 +381,39 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     return mediaEl.parentElement;
   }
 
+  /**
+   * v1.0.1 hotfix: 强制祖先链上 Obsidian 媒体相关容器的 overflow: visible，
+   * 否则工具栏（top: -38px 悬浮在容器外）会被父级 overflow:hidden 裁剪。
+   * 同步强制 position: relative，确保 absolute 定位有参照。
+   */
+  private ensureAncestorsVisible(mediaEl: HTMLElement): void {
+    const targetClassSubstrings = [
+      "internal-embed",
+      "markdown-embed",
+      "video-container",
+      "audio-container",
+      "media-embed",
+      "view-content",
+      "markdown-rendered",
+    ];
+    let el: HTMLElement | null = mediaEl.parentElement;
+    let depth = 0;
+    while (el && el !== document.body && depth < 12) {
+      const cls = (el.className && typeof el.className === "string") ? el.className : "";
+      if (cls && targetClassSubstrings.some((sub) => cls.includes(sub))) {
+        if (el.style.overflow !== "visible") {
+          el.style.overflow = "visible";
+        }
+        const computedPos = window.getComputedStyle(el).position;
+        if (computedPos === "static") {
+          el.style.position = "relative";
+        }
+      }
+      el = el.parentElement;
+      depth++;
+    }
+  }
+
   private injectToolbar(mediaEl: HTMLMediaElement): void {
     const container = this.findContainer(mediaEl);
     if (!container) return;
@@ -391,6 +424,9 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     if (forcedRelative) {
       container.style.position = "relative";
     }
+
+    // v1.0.1 hotfix: 强制祖先链 overflow: visible，避免工具栏被裁剪
+    this.ensureAncestorsVisible(mediaEl);
 
     // P1-8: anchor 单独包装，始终可见
     const anchorWrap = document.createElement("div");

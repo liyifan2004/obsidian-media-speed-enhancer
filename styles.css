@@ -17,7 +17,7 @@
    --------------------------------------------------------------------------- */
 .mse-anchor-wrap {
   position: absolute;
-  top: 8px;
+  top: -38px; /* v1.0.1 hotfix: 移到容器外顶部，避免遮挡原生控制条 */
   left: 8px;
   z-index: 51;
   display: inline-flex;
@@ -38,7 +38,7 @@
    --------------------------------------------------------------------------- */
 .mse-toolbar {
   position: absolute;
-  top: 8px;
+  top: -38px; /* v1.0.1 hotfix: 移到容器外顶部，与 anchor 同一行 */
   left: 64px; /* 避开 anchor 包装 (~56px + 8px 间距) */
   right: 8px;
   display: flex;
@@ -55,9 +55,13 @@
 .mse-toolbar.mse-toolbar-auto-hide {
   opacity: 0;
 }
+/* v1.0.1 hotfix: 工具栏在容器外顶部，扩展 hover 触发区域 */
 .mse-container:hover > .mse-toolbar.mse-toolbar-auto-hide,
+.mse-container:hover > .mse-anchor-wrap,
 .mse-toolbar.mse-toolbar-auto-hide:hover,
-.mse-anchor-wrap:hover ~ .mse-toolbar.mse-toolbar-auto-hide {
+.mse-anchor-wrap:hover ~ .mse-toolbar.mse-toolbar-auto-hide,
+.mse-container:focus-within > .mse-toolbar.mse-toolbar-auto-hide,
+.mse-container:focus-within > .mse-anchor-wrap {
   opacity: 1;
 }
 
@@ -217,12 +221,12 @@
    --------------------------------------------------------------------------- */
 @media (max-width: 480px) {
   .mse-anchor-wrap {
-    top: 4px;
+    top: -34px; /* v1.0.1 hotfix */
     left: 4px;
     padding: 3px;
   }
   .mse-toolbar {
-    top: 4px;
+    top: -34px; /* v1.0.1 hotfix */
     left: 56px;
     right: 4px;
     gap: 4px;
