@@ -1,82 +1,48 @@
 /* ===========================================================================
-   Media Speed Enhancer — 极简样式（v1.0.4 重构）
-   设计目标：
-   1. anchor 始终显示在最左侧
-   2. hover anchor 时，4 个按钮从 anchor 右侧平滑展开（动画）
-   3. 原生控制条同步动画，**右端锚定不变**、左端向右移动让出空间
-   4. 按钮样式接近原生（透明背景、圆形 hover）
-   5. 不增加音频容器总高度
+   Media Speed Enhancer — 极简样式（v1.0.6 重构）
+   方案：flex 让 audio 自动填满剩余空间，无需 absolute、无需固定高度
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
-   容器：position: relative，让 absolute 子元素有定位参考
+   容器：flex 横向布局
    --------------------------------------------------------------------------- */
 .mse-container {
-  position: relative;
-  display: block;
-  /* v1.0.4 hotfix: 固定 40px 高度，让 absolute 子元素有正确的拉伸基准，
-     否则 audio 元素的 top:0 + bottom:0 会因容器塌陷为 0 高度而被压扁 */
-  height: 40px;
-}
-
-/* ---------------------------------------------------------------------------
-   原生 audio/video 元素：absolute 定位，**右端锚定在容器右边缘**
-   - left: 56px → 默认让出 anchor 宽度
-   - hover 时 left: 216px（仅左端向右移动，右端不动）
-   - transition 让左端平滑动画
-   --------------------------------------------------------------------------- */
-.mse-container > audio,
-.mse-container > video {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 56px;
-  width: auto;
-  height: auto;
-  display: block;
-  transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* hover anchor/controls-wrap 时：audio 左端向右移到 216px */
-.mse-container:has(.mse-controls-wrap:hover) > audio,
-.mse-container:has(.mse-controls-wrap:hover) > video {
-  left: 216px;
-}
-
-/* ---------------------------------------------------------------------------
-   控件组（anchor + toolbar）：absolute 定位在最左侧
-   --------------------------------------------------------------------------- */
-.mse-controls-wrap {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
   display: flex;
   flex-direction: row;
   align-items: center;
   flex-wrap: nowrap;
-  z-index: 2;
-  width: 56px;
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* hover wrap 时整体扩展到 216px */
-.mse-container:has(.mse-controls-wrap:hover) .mse-controls-wrap {
-  width: 216px;
 }
 
 /* ---------------------------------------------------------------------------
-   Anchor 包装：始终可见，最左侧
+   audio/video：flex 自动占满剩余空间（不设固定 width）
+   --------------------------------------------------------------------------- */
+.mse-container > audio,
+.mse-container > video {
+  flex: 1 1 0;
+  min-width: 0;
+  display: block;
+}
+
+/* ---------------------------------------------------------------------------
+   控件组（anchor + toolbar）：根据需要自动扩展宽度
+   --------------------------------------------------------------------------- */
+.mse-controls-wrap {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Anchor 包装：始终可见，最左侧，透明背景
    --------------------------------------------------------------------------- */
 .mse-anchor-wrap {
-  position: relative;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 48px;
-  height: 100%;
   padding: 0 6px;
   border-radius: 4px;
   background: transparent;
@@ -90,7 +56,6 @@
   transition: background 0.15s ease;
   opacity: 1 !important;
 }
-
 .mse-anchor-wrap:hover {
   background: var(--background-modifier-hover, rgba(255, 255, 255, 0.08));
 }
@@ -99,13 +64,11 @@
    工具栏：默认收起，hover wrap 时展开
    --------------------------------------------------------------------------- */
 .mse-toolbar {
-  position: relative;
   flex: 0 0 auto;
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 0;
-  height: 100%;
   max-width: 0;
   opacity: 0;
   overflow: hidden;
@@ -113,7 +76,6 @@
   transition: max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
     opacity 0.2s ease;
 }
-
 .mse-controls-wrap:hover .mse-toolbar,
 .mse-controls-wrap:focus-within .mse-toolbar {
   max-width: 160px;
@@ -131,14 +93,12 @@
   border: none;
   box-shadow: none;
   backdrop-filter: none;
-  height: 100%;
   pointer-events: auto;
 }
-
 .mse-cluster-right { display: none !important; }
 
 /* ---------------------------------------------------------------------------
-   通用按钮：完全接近原生 audio 控制条
+   通用按钮：接近原生控制条
    --------------------------------------------------------------------------- */
 .mse-btn {
   display: inline-flex;
@@ -157,39 +117,36 @@
   font-family: inherit;
   user-select: none;
   -webkit-user-select: none;
-  transition: background 0.15s ease, color 0.15s ease,
-    transform 0.1s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-
 .mse-btn svg {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
 }
-
 .mse-btn:hover {
   background: var(--background-modifier-hover, rgba(255, 255, 255, 0.12));
   color: var(--text-normal, #fff);
 }
-
 .mse-btn:active,
 .mse-btn.is-active {
   background: var(--interactive-accent, rgba(120, 160, 220, 0.28));
   color: var(--text-on-accent, #fff);
   transform: scale(0.92);
 }
-
 .mse-btn:focus-visible {
   outline: 2px solid var(--interactive-accent, #5b9dd9);
   outline-offset: -2px;
 }
 
+/* Anchor 按钮：稍宽 */
 .mse-anchor {
   width: auto;
   min-width: 48px;
   border-radius: 4px;
 }
 
+/* 按住倍速激活态 */
 .mse-hold-speed.is-active {
   background: var(--interactive-accent, rgba(120, 160, 220, 0.45)) !important;
   color: var(--text-on-accent, #fff) !important;
@@ -198,7 +155,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   浮动菜单（"调整倍速"菜单）
+   浮动菜单
    --------------------------------------------------------------------------- */
 .mse-menu {
   position: absolute;
@@ -209,13 +166,12 @@
   padding: 4px;
   border-radius: 6px;
   background: var(--background-secondary, #2a2a2a);
-  border: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.35));
+  border: 1px solid var(--background-modifier-border);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   font-size: 13px;
   color: var(--text-normal, #ddd);
   pointer-events: auto;
 }
-
 .mse-menu .mse-menu-item {
   display: flex;
   align-items: center;
@@ -231,31 +187,20 @@
   cursor: pointer;
   text-align: left;
   user-select: none;
-  -webkit-user-select: none;
   transition: background 0.1s ease;
 }
-
 .mse-menu .mse-menu-item:hover {
-  background: var(--background-modifier-hover, rgba(127, 127, 127, 0.2));
+  background: var(--background-modifier-hover);
 }
-
 .mse-menu .mse-menu-item.is-active {
   color: var(--interactive-accent, #5b9dd9);
   font-weight: 600;
 }
-
 .mse-menu .mse-menu-item:focus-visible {
-  outline: 2px solid var(--interactive-accent, #5b9dd9);
+  outline: 2px solid var(--interactive-accent);
   outline-offset: -2px;
 }
-
-.mse-menu .mse-menu-item--empty {
-  color: var(--text-faint, #888);
-  cursor: default;
-  font-style: italic;
-}
-
-.mse-menu .mse-menu-item .mse-menu-check {
+.mse-menu .mse-menu-check {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -264,7 +209,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   textarea 美化（设置面板）
+   textarea
    --------------------------------------------------------------------------- */
 .mse-textarea {
   width: 240px;
@@ -275,23 +220,9 @@
 }
 
 /* ---------------------------------------------------------------------------
-   小屏适配
+   小屏
    --------------------------------------------------------------------------- */
 @media (max-width: 480px) {
-  .mse-container > audio,
-  .mse-container > video {
-    left: 44px;
-  }
-  .mse-container:has(.mse-controls-wrap:hover) > audio,
-  .mse-container:has(.mse-controls-wrap:hover) > video {
-    left: 184px;
-  }
-  .mse-controls-wrap {
-    width: 44px;
-  }
-  .mse-container:has(.mse-controls-wrap:hover) .mse-controls-wrap {
-    width: 184px;
-  }
   .mse-anchor-wrap {
     min-width: 40px;
     padding: 0 4px;
