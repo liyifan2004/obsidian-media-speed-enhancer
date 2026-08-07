@@ -427,6 +427,16 @@ try {
       ".view-content, .workspace-leaf-content, .markdown-rendered, .internal-embed, .media-embed"
     );
     if (inObsidianScope === null) return false;
+
+    // v1.0.12: 最短时长过滤
+    if (
+      this.settings.enableMinDuration &&
+      Number.isFinite(mediaEl.duration) &&
+      mediaEl.duration < this.settings.minDurationSeconds
+    ) {
+      return false;
+    }
+
     return true;
   }
 

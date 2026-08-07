@@ -10,6 +10,8 @@ import type MediaSpeedEnhancerPlugin from "./main";
  * - toolbarAutoHide: 工具栏是否在 hover media 时自动显示
  * - skipSeconds: 后退/前进按钮的秒数（v1.0.8 新增）
  * - globalSync: 全局倍速同步——开启后调整任意音频的倍速会同步到所有音频（v1.0.8 新增）
+ * - enableMinDuration: 启用最短时长过滤（v1.0.12 新增）
+ * - minDurationSeconds: 最短时长阈值，低于此值的音频不注入按钮（v1.0.12 新增）
  */
 export interface MediaSpeedEnhancerSettings {
   tempSpeed: number;
@@ -19,6 +21,8 @@ export interface MediaSpeedEnhancerSettings {
   toolbarAutoHide: boolean;
   skipSeconds: number;
   globalSync: boolean;
+  enableMinDuration: boolean;
+  minDurationSeconds: number;
 }
 
 /**
@@ -41,6 +45,8 @@ export const DEFAULT_SETTINGS: MediaSpeedEnhancerSettings = {
   toolbarAutoHide: true,
   skipSeconds: 5,
   globalSync: false,
+  enableMinDuration: false,
+  minDurationSeconds: 30,
 };
 
 // P1-6: 倍速边界收紧到 0.25 - 4.0
@@ -188,6 +194,51 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
             await this.plugin.refreshAllToolbars();
           })
       );
+
+    // --- 最短时长过滤（v1.0.12） ---
+    new Setting(speedSection)
+      .setName("启用最短时长过滤")
+      .setDesc(
+        "开启后，仅对时长超过指定秒数的音频/视频注入按钮。" +
+          "短音频（如音效、提示音）保持原生控制条不变。"
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.enableMinDuration)
+          .onChange(async (value) => {
+            this.plugin.settings.enableMinDuration = value;
+            await this.plugin.saveSettings();
+            await this.plugin.refreshAllToolbars();
+            // 显示/隐藏时长输入框
+            minDurationSetting.settingEl.style.display = value
+              ? ""
+              : "none";
+          })
+      );
+
+    // --- 最短时长秒数 ---
+    const minDurationSetting = new Setting(speedSection)
+      .setName("最短时长秒数")
+      .setDesc("低于此时长的音频不显示任何按钮。")
+      .addText((text) => {
+        text.setPlaceholder("30")
+          .setValue(String(this.plugin.settings.minDurationSeconds))
+          .onChange(async (value) => {
+            const num = Number(value);
+            if (Number.isFinite(num) && num >= 1 && num <= 3600) {
+              this.plugin.settings.minDurationSeconds = num;
+              await this.plugin.saveSettings();
+            }
+          });
+        text.inputEl.type = "number";
+        text.inputEl.min = "1";
+        text.inputEl.max = "3600";
+        text.inputEl.step = "1";
+      });
+    // 默认关闭时隐藏时长输入框
+    if (!this.plugin.settings.enableMinDuration) {
+      minDurationSetting.settingEl.style.display = "none";
+    }
 
     // ========================================================================
     // 跳转设置分组
