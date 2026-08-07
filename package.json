@@ -1,0 +1,28 @@
+{
+  "name": "media-speed-enhancer",
+  "version": "1.0.0",
+  "description": "Obsidian 插件：在原生 HTML5 播放器上叠加 10s 跳转、按住倍速、自定义倍速切换按钮",
+  "main": "main.js",
+  "scripts": {
+    "build": "node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "media",
+    "audio",
+    "video",
+    "speed"
+  ],
+  "author": "李轶凡",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.20.0",
+    "obsidian": "^1.5.7",
+    "tslib": "^2.6.2",
+    "typescript": "^5.3.0"
+  }
+}

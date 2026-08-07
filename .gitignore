@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+main.js
+main.js.map
+settings.js
+styles.js
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+Thumbs.db
+
+# Obsidian plugin folder (for live-sync testing)
+# The plugin lives in: D:\桌面\李轶凡的笔记仓库\学-习\.obsidian\plugins\media-speed-enhancer
+# That's synced separately, not part of this repo.
