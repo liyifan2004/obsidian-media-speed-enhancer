@@ -280,6 +280,19 @@ try {
       return;
     }
 
+    // v1.0.13 fix: 先移除所有已有 toolbar，再全量重新注入
+    // 确保设置变更（alwaysExpand, enablePlayPause 等）对已有 media 生效
+    const existingCleanups = [...this.allCleanups];
+    for (const cleanup of existingCleanups) {
+      for (const fn of cleanup.cleanups) {
+        try { fn(); } catch { /* ignore */ }
+      }
+      try { cleanup.controlsWrap.remove(); } catch { /* ignore */ }
+    }
+    this.allCleanups.clear();
+    // 清除 injectedMap，让所有 media 可重新注入
+    // (WeakMap 条目通过重新 set 覆盖)
+
     // 重新注入
     const allMedia = document.querySelectorAll("audio, video");
     allMedia.forEach((el) => {

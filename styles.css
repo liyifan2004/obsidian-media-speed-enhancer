@@ -1,8 +1,6 @@
 /* ===========================================================================
-   Media Speed Enhancer — v1.0.13 样式打磨
-   1. 按钮贴近 Obsidian 原生风格：无阴影、扁平、native-like
-   2. 菜单改为 Obsidian 原生菜单风格：扁平行、subtle hover
-   3. 支持 alwaysExpand 设置：始终展开所有按钮
+   Media Speed Enhancer — v1.0.14 样式重做
+   核心方向：扁平化 · 无色 · 原生控制条风格 · 无阴影 · 36px 高度
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
@@ -14,35 +12,36 @@
 }
 
 /* ---------------------------------------------------------------------------
-   audio/video：margin-left 让出 anchor + toolbar 空间
+   audio/video 宽度
+   默认让出 anchor(64) + 间距(8) = 72px
+   hover 让出 anchor(64) + 3 btn(108) + 3gap(6) + 间距(8) = 186px
+   hover+play 让出 anchor(64) + 4 btn(144) + 4gap(8) + 间距(8) = 224px
    --------------------------------------------------------------------------- */
 .mse-container audio,
 .mse-container video {
   display: block;
-  margin-left: 76px;
-  width: calc(100% - 76px);
-  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-    width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-left: 72px;
+  width: calc(100% - 72px);
+  transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* hover 或 alwaysExpand 时 */
 .mse-container:has(.mse-controls-wrap:hover) audio,
 .mse-container:has(.mse-controls-wrap:hover) video,
 .mse-container:has(.mse-controls-wrap.mse-always-expand) audio,
 .mse-container:has(.mse-controls-wrap.mse-always-expand) video {
-  margin-left: 180px;
-  width: calc(100% - 180px);
+  margin-left: 186px;
+  width: calc(100% - 186px);
 }
 
-/* alwaysExpand + playPause 时（更宽） */
 .mse-container:has(.mse-controls-wrap.mse-always-expand.mse-with-play) audio,
 .mse-container:has(.mse-controls-wrap.mse-always-expand.mse-with-play) video {
-  margin-left: 216px;
-  width: calc(100% - 216px);
+  margin-left: 224px;
+  width: calc(100% - 224px);
 }
 
 /* ---------------------------------------------------------------------------
-   控件组（absolute 悬浮在 audio 左侧）
+   控件组
    --------------------------------------------------------------------------- */
 .mse-controls-wrap {
   position: absolute;
@@ -52,30 +51,28 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   z-index: 2;
   pointer-events: auto;
   padding-left: 4px;
 }
 
 /* ---------------------------------------------------------------------------
-   Anchor 按钮（合并显示当前倍速 + 下拉图标）
-   v1.0.13: 改为 native 风格——更小、更轻、贴近原生
+   Anchor 按钮：当前倍速 + 下拉图标
+   36px 高（匹配原生），无阴影，透明，hover 微变
    --------------------------------------------------------------------------- */
 .mse-anchor {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 4px;
   box-sizing: border-box;
-  width: auto;
-  min-width: 56px;
-  height: 28px;
-  min-height: 28px;
-  max-height: 28px;
-  padding: 0 10px;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  min-width: 60px;
+  padding: 0 8px;
   margin: 0;
-  border: 1px solid transparent;
+  border: none;
   border-radius: 4px;
   background: transparent;
   color: var(--text-normal, #ccc);
@@ -87,66 +84,53 @@
   font-size: 12px;
   font-family: inherit;
   line-height: 1;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background 0.12s ease;
   flex-shrink: 0;
   vertical-align: middle;
 }
-
 .mse-anchor:hover {
-  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.08));
+  background: var(--background-modifier-hover, rgba(255,255,255,0.08));
 }
-
-.mse-anchor:active {
-  background: var(--background-modifier-active-hover, rgba(255, 255, 255, 0.12));
-}
-
 .mse-anchor-speed {
-  display: inline-block;
   line-height: 1;
 }
-
 .mse-anchor-icon {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   opacity: 0.6;
-  width: 10px;
-  height: 10px;
-  line-height: 1;
+  width: 12px;
+  height: 12px;
 }
-
 .mse-anchor-icon svg {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   display: block;
 }
 
 /* ---------------------------------------------------------------------------
-   Toolbar（hover 时展开）
-   v1.0.13: 改为更紧凑的尺寸（28px），贴近原生
+   Toolbar
    --------------------------------------------------------------------------- */
 .mse-toolbar {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   max-width: 0;
   overflow: hidden;
   pointer-events: none;
-  transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
-
 .mse-controls-wrap:hover .mse-toolbar,
 .mse-controls-wrap.mse-always-expand .mse-toolbar {
   max-width: 180px;
   pointer-events: auto;
 }
 
-/* 集群（无背景、无边框、无阴影） */
+/* 集群 */
 .mse-toolbar .mse-cluster {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   padding: 0;
   background: transparent;
   border: none;
@@ -154,30 +138,29 @@
   backdrop-filter: none;
   pointer-events: auto;
 }
-
-.mse-cluster-right { display: none !important; }
+.mse-cluster-right { display: none; }
 
 /* ---------------------------------------------------------------------------
-   通用按钮：28×28 圆角矩形
-   v1.0.13: 缩小为 28×28 贴近原生 audio 控制条高度；移除 box-shadow
+   通用按钮：36×36px，扁平，无阴影，无边框
+   只有 hover 时有微妙的背景色变化（和原生一样）
    --------------------------------------------------------------------------- */
 .mse-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 28px;
-  height: 28px;
-  min-height: 28px;
-  max-height: 28px;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
   padding: 0;
   margin: 0;
-  border: 1px solid transparent;
+  border: none;
   border-radius: 4px;
   background: transparent;
   color: var(--text-muted, #888);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   font-family: inherit;
   line-height: 1;
   user-select: none;
@@ -186,92 +169,66 @@
   vertical-align: middle;
   transition: background 0.12s ease, color 0.12s ease;
 }
-
 .mse-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
   display: block;
 }
-
 .mse-btn:hover {
-  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.08));
+  background: var(--background-modifier-hover, rgba(255,255,255,0.1));
   color: var(--text-normal, #ddd);
 }
-
 .mse-btn:active {
-  background: var(--background-modifier-active-hover, rgba(255, 255, 255, 0.12));
+  background: rgba(255,255,255,0.15);
 }
 
-.mse-btn.is-active {
-  background: var(--interactive-accent, rgba(120, 160, 220, 0.25));
-  color: var(--text-on-accent, #fff);
-}
-
-.mse-btn:focus-visible {
-  outline: 2px solid var(--interactive-accent, #5b9dd9);
-  outline-offset: -1px;
-}
-
-/* 按住倍速激活态 */
+/* 按住倍速激活 */
 .mse-hold-speed.is-active {
-  background: var(--interactive-accent, rgba(120, 160, 220, 0.45)) !important;
+  background: var(--interactive-accent, rgba(120,160,220,0.4)) !important;
   color: var(--text-on-accent, #fff) !important;
 }
 
 /* ---------------------------------------------------------------------------
-   浮动菜单：v1.0.13 改为 Obsidian 原生菜单风格
-   特点：扁平、subtle border、subtle shadow、items 无圆角背景
+   浮动菜单 — Obsidian 原生风格：扁平列表，无 item 边框
    --------------------------------------------------------------------------- */
 .mse-menu {
   position: absolute;
   z-index: 9999;
-  min-width: 180px;
+  min-width: 160px;
   max-height: 360px;
   overflow-y: auto;
-  padding: 4px;
+  padding: 4px 0;
   border-radius: 6px;
-  background: var(--background-primary, #1f1f1f);
-  border: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.25));
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  background: var(--background-primary, #1e1e1e);
+  border: 1px solid var(--background-modifier-border, rgba(127,127,127,0.2));
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
   font-size: 13px;
   color: var(--text-normal, #ccc);
   pointer-events: auto;
   transform-origin: top left;
-  animation: mse-menu-in 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: mse-menu-in 0.1s ease-out;
 }
-
 @keyframes mse-menu-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96) translateY(-2px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
 .mse-menu-header {
-  padding: 4px 12px;
+  padding: 4px 14px 4px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--text-faint, #888);
-  border-bottom: 1px solid var(--background-modifier-border-hover, rgba(127, 127, 127, 0.15));
-  margin-bottom: 4px;
+  color: var(--text-faint, #777);
 }
-
-/* v1.0.13: 菜单项改为 Obsidian 原生风格——无圆角背景，仅 hover 状态变背景色 */
 .mse-menu .mse-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 4px 12px;
+  padding: 5px 14px;
   border: none;
-  border-radius: 0; /* 无圆角 */
+  border-radius: 0;     /* 无圆角，纯扁平行 */
   background: transparent;
   color: var(--text-normal, #ccc);
   font-size: 13px;
@@ -282,35 +239,28 @@
   -webkit-user-select: none;
   transition: background 0.08s ease;
 }
-
 .mse-menu .mse-menu-item:hover {
-  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.06));
+  background: var(--background-modifier-hover, rgba(255,255,255,0.06));
 }
-
-/* v1.0.13: active 项改为浅色背景 + 深色文字（不再用主题 accent 强对比） */
 .mse-menu .mse-menu-item.is-active {
-  background: var(--background-modifier-active-hover, rgba(255, 255, 255, 0.12));
-  color: var(--text-normal, #fff);
-  font-weight: 500;
+  background: transparent;
+  color: var(--text-accent, #5b9dd9);
+  font-weight: 600;
 }
-
 .mse-menu .mse-menu-item.is-active:hover {
-  background: var(--background-modifier-active-hover, rgba(255, 255, 255, 0.15));
+  background: var(--background-modifier-hover, rgba(255,255,255,0.06));
 }
-
 .mse-menu .mse-menu-item:focus-visible {
-  outline: none; /* Obsidian 原生菜单无 outline */
-  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.06));
+  background: var(--background-modifier-hover, rgba(255,255,255,0.06));
+  outline: none;
 }
-
 .mse-menu .mse-menu-item--empty {
-  color: var(--text-faint, #888);
+  color: var(--text-faint);
   cursor: default;
   font-style: italic;
-  padding: 12px;
+  padding: 10px 14px;
   text-align: center;
 }
-
 .mse-menu .mse-menu-check {
   display: inline-flex;
   align-items: center;
@@ -320,21 +270,19 @@
   flex-shrink: 0;
   opacity: 0.7;
 }
-
 .mse-menu .mse-menu-speed {
   font-variant-numeric: tabular-nums;
   flex: 1;
 }
 
 /* ---------------------------------------------------------------------------
-   设置面板样式
+   设置面板
    --------------------------------------------------------------------------- */
 .mse-settings-section {
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid var(--background-modifier-border);
 }
-
 .mse-settings-section-title {
   font-size: 12px;
   font-weight: 600;
@@ -343,7 +291,6 @@
   color: var(--text-faint);
   margin-bottom: 12px;
 }
-
 .mse-textarea {
   width: 280px;
   min-height: 140px;
@@ -359,39 +306,38 @@
    小屏
    --------------------------------------------------------------------------- */
 @media (max-width: 480px) {
-  .mse-container audio,
-  .mse-container video {
-    margin-left: 60px;
-    width: calc(100% - 60px);
+  .mse-container audio, .mse-container video {
+    margin-left: 64px;
+    width: calc(100% - 64px);
   }
   .mse-container:has(.mse-controls-wrap:hover) audio,
   .mse-container:has(.mse-controls-wrap:hover) video,
   .mse-container:has(.mse-controls-wrap.mse-always-expand) audio,
   .mse-container:has(.mse-controls-wrap.mse-always-expand) video {
-    margin-left: 156px;
-    width: calc(100% - 156px);
+    margin-left: 154px;
+    width: calc(100% - 154px);
   }
   .mse-anchor {
-    min-width: 48px;
-    padding: 0 8px;
+    min-width: 52px;
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
     font-size: 11px;
-    height: 26px;
-    min-height: 26px;
-    max-height: 26px;
+    padding: 0 6px;
   }
   .mse-btn {
-    width: 26px;
-    height: 26px;
-    min-height: 26px;
-    max-height: 26px;
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
   }
   .mse-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
   .mse-controls-wrap:hover .mse-toolbar,
-.mse-controls-wrap.mse-always-expand .mse-toolbar {
-    max-width: 140px;
+  .mse-controls-wrap.mse-always-expand .mse-toolbar {
+    max-width: 150px;
   }
   .mse-textarea {
     width: 100%;
