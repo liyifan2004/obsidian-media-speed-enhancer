@@ -38,6 +38,8 @@
   left: 0;
   top: 0;
   bottom: 0;
+  /* v1.0.26: box-sizing border-box 让 style.width = 总宽度（含 padding） */
+  box-sizing: border-box;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -45,6 +47,7 @@
   z-index: 2;
   pointer-events: auto;
   padding-left: 4px;
+  width: 48px; /* 默认状态：padding 4 + anchor 40 + gap 4 + toolbar 0 = 48 */
 }
 
 /* ---------------------------------------------------------------------------
@@ -142,7 +145,8 @@
   flex-direction: row;
   align-items: center;
   gap: 4px;
-  /* v1.0.25: 默认隐藏，JS 控制 width 动画 */
+  /* v1.0.26: box-sizing border-box + 默认 width 0 */
+  box-sizing: border-box;
   width: 0;
   min-width: 0;
   overflow: hidden;
