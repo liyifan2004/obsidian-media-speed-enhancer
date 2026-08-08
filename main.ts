@@ -576,43 +576,53 @@ try {
 
     container.appendChild(controlsWrap);
 
-    // v1.0.24: 完全用 JS 控制 audio 位置（移除 CSS :has() 覆盖）
-    // 关键修复：
-    //   1. audio transition 只设一次（init 时），hover/leave 不重置
-    //   2. mouseenter/mouseleave 立即触发 updateAudioPosition，让 transition 与 toolbar 同步启动
-    //   3. ResizeObserver 在 toolbar 动画期间持续更新 audio 位置（跟随 toolbar 宽度）
-    mediaEl.style.transition =
-      "margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), " +
-      "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)";
+    // v1.0.25: 完全用 JS 控制 wrap width 和 audio margin-left
+    // 不依赖 CSS :has() 或 ResizeObserver 异步
+    // 1. mouseenter/leave 立即设置 toolbar 目标 width（CSS transition 同步启动）
+    // 2. 同时设置 audio margin-left 到目标值（CSS transition 同步启动）
+    // 3. transition 完全由 CSS 控制（都在 0.25s 同一 easing）
 
-    const updateAudioPosition = () => {
-      const wrapWidth = controlsWrap.getBoundingClientRect().width;
-      if (wrapWidth <= 0) return;
-      const targetLeft = Math.ceil(wrapWidth + 4);
-      // 只更新数值，不重置 transition（保证动画连贯）
+    const ANCHOR_WIDTH = 40;
+    const GAP = 4;
+    const PADDING_LEFT = 4;
+    const RIGHT_GAP = 4;
+
+    // 计算 hover 状态时 toolbar 目标宽度
+    const computeToolbarWidth = () => {
+      // 3 按钮 + 2 gap = 128；4 按钮 + 3 gap = 172
+      const buttonCount = (this.settings.enablePlayPause ? 4 : 3);
+      return buttonCount * ANCHOR_WIDTH + (buttonCount - 1) * GAP;
+    };
+
+    const computeWrapWidth = (toolbarWidth: number) => {
+      return PADDING_LEFT + ANCHOR_WIDTH + GAP + toolbarWidth;
+    };
+
+    const setAudioPosition = (wrapWidth: number) => {
+      const targetLeft = wrapWidth + RIGHT_GAP;
       mediaEl.style.marginLeft = `${targetLeft}px`;
       mediaEl.style.width = `calc(100% - ${targetLeft}px)`;
     };
 
-    // ResizeObserver 在 toolbar 动画期间持续同步
-    let syncRafId: number | null = null;
-    const onResize = () => {
-      if (syncRafId !== null) return;
-      syncRafId = requestAnimationFrame(() => {
-        syncRafId = null;
-        updateAudioPosition();
-      });
+    const setExpanded = (expanded: boolean) => {
+      const toolbarWidth = expanded ? computeToolbarWidth() : 0;
+      controlsWrap.style.width = `${computeWrapWidth(toolbarWidth)}px`;
+      toolbar.style.width = `${toolbarWidth}px`;
+      setAudioPosition(computeWrapWidth(toolbarWidth));
     };
-    const ro = new ResizeObserver(onResize);
-    ro.observe(controlsWrap);
 
-    // mouseenter/leave 立即触发（不等 ResizeObserver 的 microtask 异步）
-    // 这样 audio transition 与 toolbar transition 同步启动
-    controlsWrap.addEventListener("mouseenter", updateAudioPosition);
-    controlsWrap.addEventListener("mouseleave", updateAudioPosition);
+    // 设置 initial 状态
+    if (this.settings.alwaysExpand) {
+      setExpanded(true);
+    } else {
+      setExpanded(false);
+    }
 
-    // 初始同步
-    updateAudioPosition();
+    // mouseenter/leave 立即同步展开/收起
+    if (!this.settings.alwaysExpand) {
+      controlsWrap.addEventListener("mouseenter", () => setExpanded(true));
+      controlsWrap.addEventListener("mouseleave", () => setExpanded(false));
+    }
 
     const cleanupEntry: ToolbarCleanup = {
       toolbar,
@@ -624,14 +634,13 @@ try {
         hold.cleanups,
         playPause?.cleanups ?? [],
         () => {
-          // v1.0.24: 清理所有同步资源
-          ro.disconnect();
-          if (syncRafId !== null) cancelAnimationFrame(syncRafId);
-          controlsWrap.removeEventListener("mouseenter", updateAudioPosition);
-          controlsWrap.removeEventListener("mouseleave", updateAudioPosition);
+          // v1.0.25: 清理 inline style 和事件监听
+          controlsWrap.removeEventListener("mouseenter", () => setExpanded(true));
+          controlsWrap.removeEventListener("mouseleave", () => setExpanded(false));
+          controlsWrap.style.removeProperty("width");
+          toolbar.style.removeProperty("width");
           mediaEl.style.removeProperty("margin-left");
           mediaEl.style.removeProperty("width");
-          mediaEl.style.removeProperty("transition");
           container.classList.remove(CLS.container);
           if (forcedRelative) {
             container.style.position = "";

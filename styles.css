@@ -23,29 +23,11 @@
 .mse-container audio,
 .mse-container video {
   display: block;
-  margin-left: 52px;
-  width: calc(100% - 52px);
-  /* v1.0.23: 与 toolbar max-width transition 严格同步（0.25s 同一 easing） */
+  /* v1.0.25: 完全由 JS 控制位置（mouseenter/leave + ResizeObserver 同步） */
+  margin-left: 0;
+  width: 100%;
   transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
     width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* hover 或 alwaysExpand 展开 3 按钮：wrap = 4 + 40 + 4 + 128 = 176 */
-.mse-container:has(.mse-controls-wrap:hover) audio,
-.mse-container:has(.mse-controls-wrap:hover) video,
-.mse-container:has(.mse-controls-wrap.mse-always-expand) audio,
-.mse-container:has(.mse-controls-wrap.mse-always-expand) video {
-  margin-left: 180px;
-  width: calc(100% - 180px);
-}
-
-/* hover + playPause 或 alwaysExpand + playPause 展开 4 按钮：wrap = 4 + 40 + 4 + 172 = 220 */
-.mse-container:has(.mse-controls-wrap:hover.mse-with-play) audio,
-.mse-container:has(.mse-controls-wrap:hover.mse-with-play) video,
-.mse-container:has(.mse-controls-wrap.mse-always-expand.mse-with-play) audio,
-.mse-container:has(.mse-controls-wrap.mse-always-expand.mse-with-play) video {
-  margin-left: 224px;
-  width: calc(100% - 224px);
 }
 
 /* ---------------------------------------------------------------------------
@@ -160,23 +142,20 @@
   flex-direction: row;
   align-items: center;
   gap: 4px;
-  /* v1.0.24: 强制 toolbar 默认 0 宽（覆盖 flex min-width: auto） */
+  /* v1.0.25: 默认隐藏，JS 控制 width 动画 */
   width: 0;
   min-width: 0;
-  max-width: 0;
-  flex: 0 0 0;
   overflow: hidden;
   pointer-events: none;
-  transition: max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.mse-controls-wrap:hover .mse-toolbar,
-.mse-controls-wrap.mse-always-expand .mse-toolbar {
-  /* v1.0.24: width auto + max-width 200 (容纳 4 按钮 172 + 缓冲) */
-  width: auto;
-  max-width: 200px;
-  flex: 0 1 auto;
+.mse-container.mse-always-expand .mse-toolbar {
+  /* v1.0.25: alwaysExpand 时由 JS 设置 width */
   pointer-events: auto;
+}
+.mse-toolbar > * {
+  /* 子元素不会因 toolbar width 0 而溢出 */
+  flex-shrink: 0;
 }
 
 /* 集群 */
@@ -190,6 +169,7 @@
   box-shadow: none !important;
   backdrop-filter: none !important;
   pointer-events: auto;
+  flex-shrink: 0;
 }
 .mse-cluster-right { display: none; }
 
