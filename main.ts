@@ -632,11 +632,7 @@ try {
     speedSpan.textContent = `${formatRate(mediaEl.playbackRate)}×`;
     btn.appendChild(speedSpan);
 
-    const iconSpan = document.createElement("span");
-    iconSpan.className = CLS.anchorIcon;
-    iconSpan.innerHTML = SVG_CHEVRON_DOWN; // ▼ 小图标
-    btn.appendChild(iconSpan);
-
+    // v1.0.17: 移除 chevron 下拉图标（让 anchor 真正变成宽矩形）
     const renderSpeed = () => {
       speedSpan.textContent = `${formatRate(mediaEl.playbackRate)}×`;
     };
