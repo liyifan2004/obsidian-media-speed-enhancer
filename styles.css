@@ -23,8 +23,8 @@
 .mse-container audio,
 .mse-container video {
   display: block;
-  margin-left: 64px;
-  width: calc(100% - 64px);
+  margin-left: 80px;
+  width: calc(100% - 80px);
   transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
     width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -33,8 +33,8 @@
 .mse-container:has(.mse-controls-wrap:hover) video,
 .mse-container:has(.mse-controls-wrap.mse-always-expand) audio,
 .mse-container:has(.mse-controls-wrap.mse-always-expand) video {
-  margin-left: 184px;
-  width: calc(100% - 184px);
+  margin-left: 200px;
+  width: calc(100% - 200px);
 }
 
 .mse-container:has(.mse-controls-wrap.mse-always-expand.mse-with-play) audio,
@@ -74,7 +74,7 @@
   max-height: 40px;
   margin: 0;
   padding: 0;
-  border: none;
+  border: 1px solid rgba(127, 127, 127, 0.22);
   border-radius: 4px;
   background: none !important;
   box-shadow: none !important;
@@ -95,6 +95,7 @@
 .mse-btn:hover {
   background: var(--background-modifier-hover, rgba(255,255,255,0.06)) !important;
   color: var(--text-normal, #ddd);
+  border-color: rgba(127, 127, 127, 0.45) !important;
 }
 
 .mse-anchor:active,
@@ -111,13 +112,19 @@
    Anchor：当前倍速 + 下拉图标
    --------------------------------------------------------------------------- */
 .mse-anchor {
-  min-width: 60px;
-  padding: 0 8px;
-  gap: 4px;
+  min-width: 70px;
+  width: auto;
+  padding: 0 12px;
+  gap: 6px;
   font-weight: 500;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--text-normal, #ccc);
+  /* v1.0.16: 细窄边框，匹配原生 audio 控件 */
+  border: 1px solid rgba(127, 127, 127, 0.22) !important;
+}
+.mse-anchor:hover {
+  border-color: rgba(127, 127, 127, 0.45) !important;
 }
 .mse-anchor-speed { line-height: 1; }
 .mse-anchor-icon {
