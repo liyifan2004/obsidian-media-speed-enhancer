@@ -576,7 +576,29 @@ try {
 
     container.appendChild(controlsWrap);
 
-    // v1.0.9: 不再用 ResizeObserver，回归硬编码 :has() 选择器，动画更稳定
+    // v1.0.22: ResizeObserver 实时同步 controls-wrap 实际宽度到 audio margin-left
+    // 之前硬编码 :has() 选择器会因为按钮数量变化（3 vs 4 按钮）出现间距/重叠问题
+    const syncAudioMargin = () => {
+      const wrapWidth = controlsWrap.getBoundingClientRect().width;
+      if (wrapWidth <= 0) return;
+      const targetLeft = Math.ceil(wrapWidth + 4);
+      mediaEl.style.transition =
+        "margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), " +
+        "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)";
+      mediaEl.style.marginLeft = `${targetLeft}px`;
+      mediaEl.style.width = `calc(100% - ${targetLeft}px)`;
+    };
+    let syncRafId: number | null = null;
+    const onResize = () => {
+      if (syncRafId !== null) return;
+      syncRafId = requestAnimationFrame(() => {
+        syncRafId = null;
+        syncAudioMargin();
+      });
+    };
+    const ro = new ResizeObserver(onResize);
+    ro.observe(controlsWrap);
+    syncAudioMargin(); // 初始同步
 
     const cleanupEntry: ToolbarCleanup = {
       toolbar,
@@ -588,6 +610,12 @@ try {
         hold.cleanups,
         playPause?.cleanups ?? [],
         () => {
+          // v1.0.22: 清理 ResizeObserver + audio inline style
+          ro.disconnect();
+          if (syncRafId !== null) cancelAnimationFrame(syncRafId);
+          mediaEl.style.removeProperty("margin-left");
+          mediaEl.style.removeProperty("width");
+          mediaEl.style.removeProperty("transition");
           container.classList.remove(CLS.container);
           if (forcedRelative) {
             container.style.position = "";
