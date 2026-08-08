@@ -23,8 +23,8 @@
 .mse-container audio,
 .mse-container video {
   display: block;
-  margin-left: 56px;
-  width: calc(100% - 56px);
+  margin-left: 52px;
+  width: calc(100% - 52px);
   transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
     width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -33,10 +33,13 @@
 .mse-container:has(.mse-controls-wrap:hover) video,
 .mse-container:has(.mse-controls-wrap.mse-always-expand) audio,
 .mse-container:has(.mse-controls-wrap.mse-always-expand) video {
-  margin-left: 188px;
-  width: calc(100% - 188px);
+  margin-left: 180px;
+  width: calc(100% - 180px);
 }
 
+/* v1.0.21: hover + playPause 时，audio 需要让出更多空间容纳第 4 个按钮 */
+.mse-container:has(.mse-controls-wrap:hover.mse-with-play) audio,
+.mse-container:has(.mse-controls-wrap:hover.mse-with-play) video,
 .mse-container:has(.mse-controls-wrap.mse-always-expand.mse-with-play) audio,
 .mse-container:has(.mse-controls-wrap.mse-always-expand.mse-with-play) video {
   margin-left: 224px;
@@ -160,7 +163,8 @@
 }
 .mse-controls-wrap:hover .mse-toolbar,
 .mse-controls-wrap.mse-always-expand .mse-toolbar {
-  max-width: 184px;
+  /* v1.0.21: 200px 容纳 4 按钮 (172px) + 缓冲 */
+  max-width: 200px;
   pointer-events: auto;
 }
 
