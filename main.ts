@@ -576,29 +576,43 @@ try {
 
     container.appendChild(controlsWrap);
 
-    // v1.0.22: ResizeObserver 实时同步 controls-wrap 实际宽度到 audio margin-left
-    // 之前硬编码 :has() 选择器会因为按钮数量变化（3 vs 4 按钮）出现间距/重叠问题
-    const syncAudioMargin = () => {
+    // v1.0.24: 完全用 JS 控制 audio 位置（移除 CSS :has() 覆盖）
+    // 关键修复：
+    //   1. audio transition 只设一次（init 时），hover/leave 不重置
+    //   2. mouseenter/mouseleave 立即触发 updateAudioPosition，让 transition 与 toolbar 同步启动
+    //   3. ResizeObserver 在 toolbar 动画期间持续更新 audio 位置（跟随 toolbar 宽度）
+    mediaEl.style.transition =
+      "margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), " +
+      "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)";
+
+    const updateAudioPosition = () => {
       const wrapWidth = controlsWrap.getBoundingClientRect().width;
       if (wrapWidth <= 0) return;
       const targetLeft = Math.ceil(wrapWidth + 4);
-      mediaEl.style.transition =
-        "margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), " +
-        "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)";
+      // 只更新数值，不重置 transition（保证动画连贯）
       mediaEl.style.marginLeft = `${targetLeft}px`;
       mediaEl.style.width = `calc(100% - ${targetLeft}px)`;
     };
+
+    // ResizeObserver 在 toolbar 动画期间持续同步
     let syncRafId: number | null = null;
     const onResize = () => {
       if (syncRafId !== null) return;
       syncRafId = requestAnimationFrame(() => {
         syncRafId = null;
-        syncAudioMargin();
+        updateAudioPosition();
       });
     };
     const ro = new ResizeObserver(onResize);
     ro.observe(controlsWrap);
-    syncAudioMargin(); // 初始同步
+
+    // mouseenter/leave 立即触发（不等 ResizeObserver 的 microtask 异步）
+    // 这样 audio transition 与 toolbar transition 同步启动
+    controlsWrap.addEventListener("mouseenter", updateAudioPosition);
+    controlsWrap.addEventListener("mouseleave", updateAudioPosition);
+
+    // 初始同步
+    updateAudioPosition();
 
     const cleanupEntry: ToolbarCleanup = {
       toolbar,
@@ -610,9 +624,11 @@ try {
         hold.cleanups,
         playPause?.cleanups ?? [],
         () => {
-          // v1.0.22: 清理 ResizeObserver + audio inline style
+          // v1.0.24: 清理所有同步资源
           ro.disconnect();
           if (syncRafId !== null) cancelAnimationFrame(syncRafId);
+          controlsWrap.removeEventListener("mouseenter", updateAudioPosition);
+          controlsWrap.removeEventListener("mouseleave", updateAudioPosition);
           mediaEl.style.removeProperty("margin-left");
           mediaEl.style.removeProperty("width");
           mediaEl.style.removeProperty("transition");

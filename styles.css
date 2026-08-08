@@ -160,15 +160,22 @@
   flex-direction: row;
   align-items: center;
   gap: 4px;
+  /* v1.0.24: 强制 toolbar 默认 0 宽（覆盖 flex min-width: auto） */
+  width: 0;
+  min-width: 0;
   max-width: 0;
+  flex: 0 0 0;
   overflow: hidden;
   pointer-events: none;
-  transition: max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .mse-controls-wrap:hover .mse-toolbar,
 .mse-controls-wrap.mse-always-expand .mse-toolbar {
-  /* v1.0.21: 200px 容纳 4 按钮 (172px) + 缓冲 */
+  /* v1.0.24: width auto + max-width 200 (容纳 4 按钮 172 + 缓冲) */
+  width: auto;
   max-width: 200px;
+  flex: 0 1 auto;
   pointer-events: auto;
 }
 
