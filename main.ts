@@ -1,5 +1,5 @@
 import { Plugin } from "obsidian";
-import type { MediaSpeedEnhancerSettings } from "./settings"; // P2-1: 类型单独 import，避免运行时循环依赖
+import type { ButtonId, MediaSpeedEnhancerSettings } from "./settings"; // P2-1: 类型单独 import，避免运行时循环依赖
 import {
   DEFAULT_SETTINGS,
   MediaSpeedEnhancerSettingTab,
@@ -550,22 +550,32 @@ try {
     }
 
     const anchor = this.createAnchorButton(mediaEl);
-    const skipBack = this.createSkipButton(mediaEl, "back");
-    const skipForward = this.createSkipButton(mediaEl, "forward");
-    const hold = this.createHoldSpeedButton(mediaEl);
-    // v1.0.13: 播放/暂停按钮（可选）
-    const playPause = this.settings.enablePlayPause
-      ? this.createPlayPauseButton(mediaEl)
-      : null;
-    // v1.0.9: 删除独立 adjust-speed 按钮——功能已合并到 anchor（点击/右键 anchor 打开倍速菜单）
 
-    // v1.0.10: 直接把 anchor 按钮放进 controls-wrap（移除多余的 anchor-wrap div）
-    // 3 个 hover 按钮放在 toolbar
-    leftCluster.appendChild(skipBack.btn);
-    leftCluster.appendChild(skipForward.btn);
-    leftCluster.appendChild(hold.btn);
-    if (playPause) {
-      leftCluster.appendChild(playPause.btn);
+    // v1.0.27: 按 settings.buttonOrder 顺序，根据 enabledButtons 创建启用的按钮
+    const orderedEnabled: ButtonResult[] = [];
+    for (const id of this.settings.buttonOrder) {
+      if (!this.settings.enabledButtons[id]) continue;
+      let btn: ButtonResult | null = null;
+      switch (id) {
+        case "skipBack":
+          btn = this.createSkipButton(mediaEl, "back");
+          break;
+        case "skipForward":
+          btn = this.createSkipButton(mediaEl, "forward");
+          break;
+        case "holdSpeed":
+          btn = this.createHoldSpeedButton(mediaEl);
+          break;
+        case "playPause":
+          btn = this.createPlayPauseButton(mediaEl);
+          break;
+      }
+      if (btn) orderedEnabled.push(btn);
+    }
+
+    // 把启用的按钮按顺序添加到 cluster
+    for (const btn of orderedEnabled) {
+      leftCluster.appendChild(btn.btn);
     }
 
     toolbar.appendChild(leftCluster);
@@ -629,10 +639,7 @@ try {
       controlsWrap,
       cleanups: [
         anchor.cleanups,
-        skipBack.cleanups,
-        skipForward.cleanups,
-        hold.cleanups,
-        playPause?.cleanups ?? [],
+        ...orderedEnabled.map((b) => b.cleanups),
         () => {
           // v1.0.25: 清理 inline style 和事件监听
           controlsWrap.removeEventListener("mouseenter", () => setExpanded(true));

@@ -15,6 +15,50 @@ import type MediaSpeedEnhancerPlugin from "./main";
  * - enablePlayPause: 是否注入播放/暂停按钮（v1.0.13 新增，默认关闭）
  * - alwaysExpand: 始终展开所有按钮（不受 hover 限制）（v1.0.13 新增，默认关闭）
  */
+/**
+ * 按钮 ID 类型（用于 enabledButtons + buttonOrder）
+ * - anchor 总是显示，不在此处配置
+ * - skipBack/skipForward/holdSpeed/playPause 可配置开关和顺序
+ */
+export type ButtonId = "skipBack" | "skipForward" | "holdSpeed" | "playPause";
+
+/**
+ * 按钮元数据：显示名称、描述、默认启用状态
+ */
+export interface ButtonMeta {
+  id: ButtonId;
+  name: string;
+  description: string;
+  defaultEnabled: boolean;
+}
+
+export const BUTTON_META: ButtonMeta[] = [
+  {
+    id: "skipBack",
+    name: "后退 N 秒",
+    description: "单击后退 N 秒（默认 5 秒，可在「跳转」分组设置）",
+    defaultEnabled: true,
+  },
+  {
+    id: "skipForward",
+    name: "前进 N 秒",
+    description: "单击前进 N 秒",
+    defaultEnabled: true,
+  },
+  {
+    id: "holdSpeed",
+    name: "按住临时倍速",
+    description: "按住临时加速到设置值，松开恢复",
+    defaultEnabled: true,
+  },
+  {
+    id: "playPause",
+    name: "播放/暂停",
+    description: "原生控件已有播放按钮；开启后会多一个可自定义位置的按钮",
+    defaultEnabled: false,
+  },
+];
+
 export interface MediaSpeedEnhancerSettings {
   tempSpeed: number;
   customSpeeds: number[];
@@ -25,8 +69,10 @@ export interface MediaSpeedEnhancerSettings {
   globalSync: boolean;
   enableMinDuration: boolean;
   minDurationSeconds: number;
-  enablePlayPause: boolean;
-  alwaysExpand: boolean;
+  /** v1.0.27: 每个按钮是否启用 */
+  enabledButtons: Record<ButtonId, boolean>;
+  /** v1.0.27: 按钮显示顺序 */
+  buttonOrder: ButtonId[];
 }
 
 /**
@@ -51,8 +97,10 @@ export const DEFAULT_SETTINGS: MediaSpeedEnhancerSettings = {
   globalSync: false,
   enableMinDuration: false,
   minDurationSeconds: 30,
-  enablePlayPause: false,
-  alwaysExpand: false,
+  enabledButtons: Object.fromEntries(
+    BUTTON_META.map((b) => [b.id, b.defaultEnabled])
+  ) as Record<ButtonId, boolean>,
+  buttonOrder: BUTTON_META.map((b) => b.id),
 };
 
 // P1-6: 倍速边界收紧到 0.25 - 4.0
@@ -323,7 +371,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     new Setting(displaySection)
       .setName("始终展开所有按钮")
       .setDesc(
-        "开启后 3 个功能按钮（后退/前进/按住倍速/播放暂停）始终显示，无需 hover。"
+        "开启后功能按钮常驻显示，无需 hover。"
       )
       .addToggle((toggle) =>
         toggle
@@ -335,21 +383,129 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
           })
       );
 
-    // --- 启用播放/暂停按钮（v1.0.13） ---
-    new Setting(displaySection)
-      .setName("启用播放/暂停按钮")
-      .setDesc(
-        "在工具栏里增加一个播放/暂停按钮。开启后无论 hover 与否都可见（不影响其他按钮的 hover 行为）。"
-      )
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.enablePlayPause)
-          .onChange(async (value) => {
-            this.plugin.settings.enablePlayPause = value;
-            await this.plugin.saveSettings();
-            await this.plugin.refreshAllToolbars();
-          })
+    // ========================================================================
+    // 按钮配置分组（v1.0.27）：开关 + 拖拽排序
+    // ========================================================================
+    const buttonSection = containerEl.createDiv({ cls: "mse-settings-section" });
+    buttonSection.createEl("h3", { text: "按钮配置" });
+    buttonSection.createEl("p", {
+      cls: "setting-item-description",
+      text: "自定义要显示的功能按钮及其顺序。当前倍速按钮始终显示在最左侧。",
+    });
+
+    // --- 按钮开关列表 ---
+    new Setting(buttonSection)
+      .setName("启用的按钮")
+      .setDesc("勾选要显示的按钮；关闭的按钮不占用工具栏空间。");
+
+    const enabledList = buttonSection.createDiv({ cls: "mse-button-toggle-list" });
+    for (const meta of BUTTON_META) {
+      const row = enabledList.createDiv({ cls: "mse-button-toggle-row" });
+      const cb = row.createEl("input", {
+        type: "checkbox",
+        attr: { id: `mse-toggle-${meta.id}` },
+      });
+      cb.checked = this.plugin.settings.enabledButtons[meta.id];
+      const label = row.createEl("label", {
+        text: meta.name,
+        attr: { for: `mse-toggle-${meta.id}` },
+      });
+      label.createEl("span", {
+        cls: "setting-item-description",
+        text: meta.description,
+      });
+      cb.addEventListener("change", async () => {
+        this.plugin.settings.enabledButtons[meta.id] = cb.checked;
+        await this.plugin.saveSettings();
+        await this.plugin.refreshAllToolbars();
+      });
+    }
+
+    // --- 按钮排序（HTML5 拖拽） ---
+    new Setting(buttonSection)
+      .setName("按钮顺序")
+      .setDesc("拖拽调整功能按钮的显示顺序。当前倍速按钮固定在最左侧，不参与排序。");
+
+    const orderList = buttonSection.createDiv({ cls: "mse-button-order-list" });
+    let dragSrcId: ButtonId | null = null;
+    const orderRows: Map<ButtonId, HTMLElement> = new Map();
+    for (const id of this.plugin.settings.buttonOrder) {
+      const meta = BUTTON_META.find((b) => b.id === id);
+      if (!meta) continue;
+      const row = orderList.createDiv({
+        cls: "mse-button-order-row",
+        attr: { "data-button-id": id, draggable: "true" },
+      });
+      const handle = row.createSpan({
+        cls: "mse-button-order-handle",
+        text: "≡",
+      });
+      handle.setAttr("aria-hidden", "true");
+      row.createSpan({ text: meta.name, cls: "mse-button-order-label" });
+      orderRows.set(id, row);
+
+      row.addEventListener("dragstart", (e) => {
+        dragSrcId = id;
+        row.classList.add("mse-dragging");
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", id);
+        }
+      });
+      row.addEventListener("dragend", () => {
+        row.classList.remove("mse-dragging");
+        dragSrcId = null;
+        orderList.querySelectorAll(".mse-drag-over").forEach((el) =>
+          el.classList.remove("mse-drag-over")
+        );
+      });
+      row.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        row.classList.add("mse-drag-over");
+      });
+      row.addEventListener("dragleave", () => {
+        row.classList.remove("mse-drag-over");
+      });
+      row.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        row.classList.remove("mse-drag-over");
+        const fallback = e.dataTransfer?.getData("text/plain") as ButtonId | "";
+        const src = dragSrcId ?? (fallback || null);
+        if (!src || src === id) return;
+        const newOrder = [...this.plugin.settings.buttonOrder];
+        const srcIdx = newOrder.indexOf(src);
+        const dstIdx = newOrder.indexOf(id);
+        if (srcIdx < 0 || dstIdx < 0) return;
+        newOrder.splice(srcIdx, 1);
+        newOrder.splice(dstIdx, 0, src);
+        this.plugin.settings.buttonOrder = newOrder;
+        await this.plugin.saveSettings();
+        await this.plugin.refreshAllToolbars();
+        // 视觉重排 DOM
+        for (const bid of newOrder) {
+          const r = orderRows.get(bid);
+          if (r) orderList.appendChild(r);
+        }
+      });
+    }
+
+    // --- 重置按钮配置 ---
+    new Setting(buttonSection)
+      .setName("重置按钮配置")
+      .setDesc("恢复默认的按钮顺序和启用状态。")
+      .addButton((btn) =>
+        btn.setButtonText("重置").onClick(async () => {
+          this.plugin.settings.buttonOrder = BUTTON_META.map((b) => b.id);
+          this.plugin.settings.enabledButtons = Object.fromEntries(
+            BUTTON_META.map((b) => [b.id, b.defaultEnabled])
+          ) as Record<ButtonId, boolean>;
+          await this.plugin.saveSettings();
+          await this.plugin.refreshAllToolbars();
+          this.display();
+        })
       );
+
 
     // ========================================================================
     // 兼容性设置分组
