@@ -12,6 +12,8 @@ import type MediaSpeedEnhancerPlugin from "./main";
  * - globalSync: 全局倍速同步——开启后调整任意音频的倍速会同步到所有音频（v1.0.8 新增）
  * - enableMinDuration: 启用最短时长过滤（v1.0.12 新增）
  * - minDurationSeconds: 最短时长阈值，低于此值的音频不注入按钮（v1.0.12 新增）
+ * - enablePlayPause: 是否注入播放/暂停按钮（v1.0.13 新增，默认关闭）
+ * - alwaysExpand: 始终展开所有按钮（不受 hover 限制）（v1.0.13 新增，默认关闭）
  */
 export interface MediaSpeedEnhancerSettings {
   tempSpeed: number;
@@ -23,6 +25,8 @@ export interface MediaSpeedEnhancerSettings {
   globalSync: boolean;
   enableMinDuration: boolean;
   minDurationSeconds: number;
+  enablePlayPause: boolean;
+  alwaysExpand: boolean;
 }
 
 /**
@@ -47,6 +51,8 @@ export const DEFAULT_SETTINGS: MediaSpeedEnhancerSettings = {
   globalSync: false,
   enableMinDuration: false,
   minDurationSeconds: 30,
+  enablePlayPause: false,
+  alwaysExpand: false,
 };
 
 // P1-6: 倍速边界收紧到 0.25 - 4.0
@@ -308,6 +314,38 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.toolbarAutoHide)
           .onChange(async (value) => {
             this.plugin.settings.toolbarAutoHide = value;
+            await this.plugin.saveSettings();
+            await this.plugin.refreshAllToolbars();
+          })
+      );
+
+    // --- 始终展开所有按钮（v1.0.13） ---
+    new Setting(displaySection)
+      .setName("始终展开所有按钮")
+      .setDesc(
+        "开启后 3 个功能按钮（后退/前进/按住倍速/播放暂停）始终显示，无需 hover。"
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.alwaysExpand)
+          .onChange(async (value) => {
+            this.plugin.settings.alwaysExpand = value;
+            await this.plugin.saveSettings();
+            await this.plugin.refreshAllToolbars();
+          })
+      );
+
+    // --- 启用播放/暂停按钮（v1.0.13） ---
+    new Setting(displaySection)
+      .setName("启用播放/暂停按钮")
+      .setDesc(
+        "在工具栏里增加一个播放/暂停按钮。开启后无论 hover 与否都可见（不影响其他按钮的 hover 行为）。"
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.enablePlayPause)
+          .onChange(async (value) => {
+            this.plugin.settings.enablePlayPause = value;
             await this.plugin.saveSettings();
             await this.plugin.refreshAllToolbars();
           })

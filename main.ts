@@ -54,6 +54,7 @@ const CLS = {
   skipBack: "mse-skip-back",
   skipForward: "mse-skip-forward",
   holdSpeed: "mse-hold-speed",
+  playPause: "mse-play-pause", // v1.0.13: 播放/暂停按钮
   // v1.0.9: 删除了 adjustSpeed（功能合并到 anchor）
   active: "is-active",
   menu: "mse-menu",
@@ -75,6 +76,10 @@ const SVG_CHECK = `<svg viewBox="0 0 24 24" width="14" height="14" fill="current
 
 // v1.0.9: chevron-down 小图标，用于 anchor 按钮右侧提示"可下拉"
 const SVG_CHEVRON_DOWN = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>`;
+
+// v1.0.13: 播放/暂停图标（两态切换）
+const SVG_PLAY = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
+const SVG_PAUSE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
 
 // ----------------------------------------------------------------------------
 // 类型
@@ -515,6 +520,14 @@ try {
     const controlsWrap = document.createElement("div");
     controlsWrap.className = CLS.controlsWrap;
 
+    // v1.0.13: 设置 mse-always-expand 类，让 toolbar 常驻展开
+    if (this.settings.alwaysExpand) {
+      controlsWrap.classList.add("mse-always-expand");
+      if (this.settings.enablePlayPause) {
+        controlsWrap.classList.add("mse-with-play");
+      }
+    }
+
     // v1.0.10: 移除 anchor-wrap div，直接把 anchor 按钮放进 controls-wrap
 
     // toolbar 包含其余按钮（默认收起，hover wrap 时展开动画）
@@ -527,6 +540,10 @@ try {
     const skipBack = this.createSkipButton(mediaEl, "back");
     const skipForward = this.createSkipButton(mediaEl, "forward");
     const hold = this.createHoldSpeedButton(mediaEl);
+    // v1.0.13: 播放/暂停按钮（可选）
+    const playPause = this.settings.enablePlayPause
+      ? this.createPlayPauseButton(mediaEl)
+      : null;
     // v1.0.9: 删除独立 adjust-speed 按钮——功能已合并到 anchor（点击/右键 anchor 打开倍速菜单）
 
     // v1.0.10: 直接把 anchor 按钮放进 controls-wrap（移除多余的 anchor-wrap div）
@@ -534,6 +551,9 @@ try {
     leftCluster.appendChild(skipBack.btn);
     leftCluster.appendChild(skipForward.btn);
     leftCluster.appendChild(hold.btn);
+    if (playPause) {
+      leftCluster.appendChild(playPause.btn);
+    }
 
     toolbar.appendChild(leftCluster);
 
@@ -553,6 +573,7 @@ try {
         skipBack.cleanups,
         skipForward.cleanups,
         hold.cleanups,
+        playPause?.cleanups ?? [],
         () => {
           container.classList.remove(CLS.container);
           if (forcedRelative) {
@@ -791,6 +812,49 @@ try {
   }
 
   // v1.0.9: 删除了独立的 createAdjustSpeedButton——功能已合并到 anchor 按钮
+
+  /**
+   * v1.0.13: 播放/暂停按钮
+   * 切换 media 播放/暂停状态，图标随状态变化
+   */
+  private createPlayPauseButton(mediaEl: HTMLMediaElement): ButtonResult {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `${CLS.btn} ${CLS.playPause}`;
+    btn.setAttribute("aria-label", "播放/暂停");
+
+    const renderIcon = () => {
+      btn.innerHTML = mediaEl.paused ? SVG_PLAY : SVG_PAUSE;
+    };
+    renderIcon();
+
+    const bag = new ListenerBag();
+    const onClick = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (mediaEl.paused) {
+        void mediaEl.play();
+      } else {
+        mediaEl.pause();
+      }
+    };
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const onPlay = () => renderIcon();
+    const onPause = () => renderIcon();
+
+    bag.add(btn, "click", onClick);
+    bag.add(btn, "contextmenu", onContextMenu);
+    bag.add(mediaEl, "play", onPlay);
+    bag.add(mediaEl, "pause", onPause);
+
+    return {
+      btn,
+      cleanups: [() => bag.clear()],
+    };
+  }
 
   // ------------------------------------------------------------------
   // 调整倍速菜单（P1-1, P1-2, P1-3, P1-9 修复）

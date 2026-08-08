@@ -1,11 +1,8 @@
 /* ===========================================================================
-   Media Speed Enhancer — v1.0.9 设计打磨
-   修复：
-   1. anchor 与 adjust-speed 合并成一个按钮（"1.0× ▾"）
-   2. 所有按钮统一矩形圆角（不再圆形）
-   3. 修复菜单 active 项文字与背景同色不可见
-   4. 动画同步：移除 toolbar opacity 干扰，让 max-width 平滑揭示按钮
-   5. 用 :has() + 硬编码值（去掉 ResizeObserver），动画更流畅
+   Media Speed Enhancer — v1.0.13 样式打磨
+   1. 按钮贴近 Obsidian 原生风格：无阴影、扁平、native-like
+   2. 菜单改为 Obsidian 原生菜单风格：扁平行、subtle hover
+   3. 支持 alwaysExpand 设置：始终展开所有按钮
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
@@ -18,22 +15,30 @@
 
 /* ---------------------------------------------------------------------------
    audio/video：margin-left 让出 anchor + toolbar 空间
-   v1.0.9: 硬编码（去掉 ResizeObserver），动画更稳定
    --------------------------------------------------------------------------- */
 .mse-container audio,
 .mse-container video {
   display: block;
-  margin-left: 76px; /* anchor(64) + 间距(12) */
+  margin-left: 76px;
   width: calc(100% - 76px);
   transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
     width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* hover 时：anchor(64) + 3 按钮(96) + 2 gaps(8) + 间距(8) = 176 */
+/* hover 或 alwaysExpand 时 */
 .mse-container:has(.mse-controls-wrap:hover) audio,
-.mse-container:has(.mse-controls-wrap:hover) video {
+.mse-container:has(.mse-controls-wrap:hover) video,
+.mse-container:has(.mse-controls-wrap.mse-always-expand) audio,
+.mse-container:has(.mse-controls-wrap.mse-always-expand) video {
   margin-left: 180px;
   width: calc(100% - 180px);
+}
+
+/* alwaysExpand + playPause 时（更宽） */
+.mse-container:has(.mse-controls-wrap.mse-always-expand.mse-with-play) audio,
+.mse-container:has(.mse-controls-wrap.mse-always-expand.mse-with-play) video {
+  margin-left: 216px;
+  width: calc(100% - 216px);
 }
 
 /* ---------------------------------------------------------------------------
@@ -47,7 +52,7 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   z-index: 2;
   pointer-events: auto;
   padding-left: 4px;
@@ -55,9 +60,7 @@
 
 /* ---------------------------------------------------------------------------
    Anchor 按钮（合并显示当前倍速 + 下拉图标）
-   点击/右键打开倍速菜单
-   v1.0.10: 强制 box-sizing: border-box + line-height: 1 + 显式高度，
-   与 .mse-btn 完全统一尺寸
+   v1.0.13: 改为 native 风格——更小、更轻、贴近原生
    --------------------------------------------------------------------------- */
 .mse-anchor {
   display: inline-flex;
@@ -66,35 +69,35 @@
   gap: 4px;
   box-sizing: border-box;
   width: auto;
-  min-width: 64px;
-  height: 32px;
-  min-height: 32px;
-  max-height: 32px;
-  padding: 0 12px;
+  min-width: 56px;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding: 0 10px;
   margin: 0;
-  border: none;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
   background: transparent;
-  color: var(--text-normal, #ddd);
+  color: var(--text-normal, #ccc);
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 12px;
   font-family: inherit;
   line-height: 1;
-  transition: background 0.15s ease;
+  transition: background 0.12s ease, border-color 0.12s ease;
   flex-shrink: 0;
   vertical-align: middle;
 }
 
 .mse-anchor:hover {
-  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.1));
+  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.08));
 }
 
 .mse-anchor:active {
-  background: var(--background-modifier-active-hover, rgba(255, 255, 255, 0.15));
+  background: var(--background-modifier-active-hover, rgba(255, 255, 255, 0.12));
 }
 
 .mse-anchor-speed {
@@ -106,43 +109,44 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.65;
-  width: 12px;
-  height: 12px;
+  opacity: 0.6;
+  width: 10px;
+  height: 10px;
   line-height: 1;
 }
 
 .mse-anchor-icon svg {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   display: block;
 }
 
 /* ---------------------------------------------------------------------------
-   Toolbar（3 个按钮：后退/前进/按住倍速）
-   v1.0.9: 移除 opacity 干扰，只用 max-width 揭示按钮
+   Toolbar（hover 时展开）
+   v1.0.13: 改为更紧凑的尺寸（28px），贴近原生
    --------------------------------------------------------------------------- */
 .mse-toolbar {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   max-width: 0;
   overflow: hidden;
   pointer-events: none;
   transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.mse-controls-wrap:hover .mse-toolbar {
-  max-width: 120px;
+.mse-controls-wrap:hover .mse-toolbar,
+.mse-controls-wrap.mse-always-expand .mse-toolbar {
+  max-width: 180px;
   pointer-events: auto;
 }
 
-/* 集群 */
+/* 集群（无背景、无边框、无阴影） */
 .mse-toolbar .mse-cluster {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   padding: 0;
   background: transparent;
   border: none;
@@ -154,24 +158,24 @@
 .mse-cluster-right { display: none !important; }
 
 /* ---------------------------------------------------------------------------
-   通用按钮：32×32 圆角矩形（接近原生）
-   v1.0.10: 与 anchor 完全统一尺寸（box-sizing, line-height, height）
+   通用按钮：28×28 圆角矩形
+   v1.0.13: 缩小为 28×28 贴近原生 audio 控制条高度；移除 box-shadow
    --------------------------------------------------------------------------- */
 .mse-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 32px;
-  height: 32px;
-  min-height: 32px;
-  max-height: 32px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
   padding: 0;
   margin: 0;
-  border: none;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
   background: transparent;
-  color: var(--text-muted, #999);
+  color: var(--text-muted, #888);
   cursor: pointer;
   font-size: 12px;
   font-family: inherit;
@@ -180,66 +184,67 @@
   -webkit-user-select: none;
   flex-shrink: 0;
   vertical-align: middle;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
 .mse-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
   display: block;
 }
 
 .mse-btn:hover {
-  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.12));
-  color: var(--text-normal, #fff);
+  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-normal, #ddd);
 }
 
 .mse-btn:active {
-  transform: scale(0.92);
+  background: var(--background-modifier-active-hover, rgba(255, 255, 255, 0.12));
 }
 
 .mse-btn.is-active {
-  background: var(--interactive-accent, rgba(120, 160, 220, 0.35));
+  background: var(--interactive-accent, rgba(120, 160, 220, 0.25));
   color: var(--text-on-accent, #fff);
 }
 
 .mse-btn:focus-visible {
   outline: 2px solid var(--interactive-accent, #5b9dd9);
-  outline-offset: -2px;
+  outline-offset: -1px;
 }
 
 /* 按住倍速激活态 */
 .mse-hold-speed.is-active {
-  background: var(--interactive-accent, rgba(120, 160, 220, 0.55)) !important;
+  background: var(--interactive-accent, rgba(120, 160, 220, 0.45)) !important;
   color: var(--text-on-accent, #fff) !important;
 }
 
 /* ---------------------------------------------------------------------------
-   浮动菜单：v1.0.9 修复 active 项文字颜色
+   浮动菜单：v1.0.13 改为 Obsidian 原生菜单风格
+   特点：扁平、subtle border、subtle shadow、items 无圆角背景
    --------------------------------------------------------------------------- */
 .mse-menu {
   position: absolute;
   z-index: 9999;
-  min-width: 160px;
-  max-height: 320px;
+  min-width: 180px;
+  max-height: 360px;
   overflow-y: auto;
   padding: 4px;
-  border-radius: 10px;
+  border-radius: 6px;
   background: var(--background-primary, #1f1f1f);
-  border: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.3));
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.25));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   font-size: 13px;
-  color: var(--text-normal, #ddd);
+  color: var(--text-normal, #ccc);
   pointer-events: auto;
   transform-origin: top left;
-  animation: mse-menu-in 0.14s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: mse-menu-in 0.12s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @keyframes mse-menu-in {
   from {
     opacity: 0;
-    transform: scale(0.95) translateY(-4px);
+    transform: scale(0.96) translateY(-2px);
   }
   to {
     opacity: 1;
@@ -248,53 +253,54 @@
 }
 
 .mse-menu-header {
-  padding: 8px 12px 6px;
+  padding: 4px 12px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-faint, #888);
-  border-bottom: 1px solid var(--background-modifier-border, rgba(127, 127, 127, 0.2));
+  border-bottom: 1px solid var(--background-modifier-border-hover, rgba(127, 127, 127, 0.15));
   margin-bottom: 4px;
 }
 
+/* v1.0.13: 菜单项改为 Obsidian 原生风格——无圆角背景，仅 hover 状态变背景色 */
 .mse-menu .mse-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 10px;
+  padding: 4px 12px;
   border: none;
-  border-radius: 6px;
+  border-radius: 0; /* 无圆角 */
   background: transparent;
-  color: var(--text-normal, #ddd);
+  color: var(--text-normal, #ccc);
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
   user-select: none;
   -webkit-user-select: none;
-  transition: background 0.1s ease;
+  transition: background 0.08s ease;
 }
 
 .mse-menu .mse-menu-item:hover {
-  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.08));
+  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.06));
 }
 
-/* v1.0.9 修复：active 项文字用 text-on-accent，不再与背景同色 */
+/* v1.0.13: active 项改为浅色背景 + 深色文字（不再用主题 accent 强对比） */
 .mse-menu .mse-menu-item.is-active {
-  background: var(--interactive-accent, rgba(120, 160, 220, 0.85));
-  color: var(--text-on-accent, #ffffff);
-  font-weight: 600;
+  background: var(--background-modifier-active-hover, rgba(255, 255, 255, 0.12));
+  color: var(--text-normal, #fff);
+  font-weight: 500;
 }
 
 .mse-menu .mse-menu-item.is-active:hover {
-  background: var(--interactive-accent-hover, rgba(120, 160, 220, 0.95));
+  background: var(--background-modifier-active-hover, rgba(255, 255, 255, 0.15));
 }
 
 .mse-menu .mse-menu-item:focus-visible {
-  outline: 2px solid var(--interactive-accent, #5b9dd9);
-  outline-offset: -2px;
+  outline: none; /* Obsidian 原生菜单无 outline */
+  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.06));
 }
 
 .mse-menu .mse-menu-item--empty {
@@ -309,9 +315,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
+  opacity: 0.7;
 }
 
 .mse-menu .mse-menu-speed {
@@ -354,30 +361,37 @@
 @media (max-width: 480px) {
   .mse-container audio,
   .mse-container video {
-    margin-left: 64px;
-    width: calc(100% - 64px);
+    margin-left: 60px;
+    width: calc(100% - 60px);
   }
   .mse-container:has(.mse-controls-wrap:hover) audio,
-  .mse-container:has(.mse-controls-wrap:hover) video {
-    margin-left: 152px;
-    width: calc(100% - 152px);
+  .mse-container:has(.mse-controls-wrap:hover) video,
+  .mse-container:has(.mse-controls-wrap.mse-always-expand) audio,
+  .mse-container:has(.mse-controls-wrap.mse-always-expand) video {
+    margin-left: 156px;
+    width: calc(100% - 156px);
   }
   .mse-anchor {
-    min-width: 52px;
+    min-width: 48px;
     padding: 0 8px;
     font-size: 11px;
+    height: 26px;
+    min-height: 26px;
+    max-height: 26px;
   }
   .mse-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 4px;
+    width: 26px;
+    height: 26px;
+    min-height: 26px;
+    max-height: 26px;
   }
   .mse-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
   }
-  .mse-controls-wrap:hover .mse-toolbar {
-    max-width: 100px;
+  .mse-controls-wrap:hover .mse-toolbar,
+.mse-controls-wrap.mse-always-expand .mse-toolbar {
+    max-width: 140px;
   }
   .mse-textarea {
     width: 100%;
