@@ -25,10 +25,12 @@
   display: block;
   margin-left: 52px;
   width: calc(100% - 52px);
+  /* v1.0.23: 与 toolbar max-width transition 严格同步（0.25s 同一 easing） */
   transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
     width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* hover 或 alwaysExpand 展开 3 按钮：wrap = 4 + 40 + 4 + 128 = 176 */
 .mse-container:has(.mse-controls-wrap:hover) audio,
 .mse-container:has(.mse-controls-wrap:hover) video,
 .mse-container:has(.mse-controls-wrap.mse-always-expand) audio,
@@ -37,7 +39,7 @@
   width: calc(100% - 180px);
 }
 
-/* v1.0.21: hover + playPause 时，audio 需要让出更多空间容纳第 4 个按钮 */
+/* hover + playPause 或 alwaysExpand + playPause 展开 4 按钮：wrap = 4 + 40 + 4 + 172 = 220 */
 .mse-container:has(.mse-controls-wrap:hover.mse-with-play) audio,
 .mse-container:has(.mse-controls-wrap:hover.mse-with-play) video,
 .mse-container:has(.mse-controls-wrap.mse-always-expand.mse-with-play) audio,
@@ -121,15 +123,17 @@
    Anchor：当前倍速 + 下拉图标
    --------------------------------------------------------------------------- */
 .mse-anchor {
-  /* v1.0.20: anchor 接近正方形 —— width 自适应但加 min-width: 40px */
+  /* v1.0.23: anchor 严格 40px 宽（去 padding，box-sizing border-box） */
+  width: 40px;
   min-width: 40px;
-  width: auto;
-  padding: 0 8px;
+  max-width: 40px;
+  padding: 0;
   font-weight: 500;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--text-normal, #ccc);
   gap: 0;
+  letter-spacing: -0.3px;
 }
 .mse-anchor:hover {
   border-color: rgba(127, 127, 127, 0.45) !important;
