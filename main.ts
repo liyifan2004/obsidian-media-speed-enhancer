@@ -24,7 +24,6 @@ import {
 //    - 启动后 30 秒内每 2 秒轮询兜底（修复新插入音频被漏掉的情况）
 //    - WeakMap<HTMLMediaElement, ToolbarCleanup>：支持重渲染后的重新挂载（P1-10）
 //    - Set<ToolbarCleanup>：用于 onunload 时遍历清理
-//    - showButtons 变更触发 refreshAllToolbars() 动态增删（P1-5）
 //
 // ============================================================================
 
@@ -106,9 +105,14 @@ interface ButtonResult {
   cleanups: Array<() => void>;
 }
 
+/**
+ * v1.1.0: 跳过静音检测器
+ * 用 MediaElementAudioSourceNode + AnalyserNode 抓取实时能量，
+ * 在一个滑动窗口里计算 RMS，遇到连续 silenceMinMs 静音则跳到片段末尾。
+ */
 // ----------------------------------------------------------------------------
-// 辅助：ListenerBag — 收集 addEventListener/removeEventListener 配对
-// ----------------------------------------------------------------------------
+  // 辅助：ListenerBag — 收集 addEventListener/removeEventListener 配对
+  // ----------------------------------------------------------------------------
 
 class ListenerBag {
   private readonly items: Array<{
@@ -122,11 +126,12 @@ class ListenerBag {
   add(
     target: EventTarget,
     type: string,
-    handler: EventListener,
+    handler: (event: any) => void,
     capture?: boolean
   ): void {
-    target.addEventListener(type, handler, capture);
-    this.items.push({ target, type, handler, capture });
+    const listener = handler as EventListener;
+    target.addEventListener(type, listener, capture);
+    this.items.push({ target, type, handler: listener, capture });
   }
 
   /** 移除所有已添加的监听 */
@@ -161,13 +166,33 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   private openMenu: OpenMenu | null = null;
   /** v1.0.2: 轮询兜底 timer（启动后 30s 内每 2s 全量扫描一次，捕获 MutationObserver 漏掉的动态插入） */
   private pollingTimer: number | null = null;
+  /** v1.0.36: 最近一次交互/播放的媒体，快捷键命令的作用目标 */
+  private lastActiveMedia: HTMLMediaElement | null = null;
+  /** v1.0.36: 快捷键"切换临时倍速"时记录的原始 playbackRate */
+  private readonly holdSpeedOrigins: WeakMap<HTMLMediaElement, number> =
+    new WeakMap();
 
   // ------------------------------------------------------------------
   // 生命周期
   // ------------------------------------------------------------------
 
   async onload(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const stored = (await this.loadData()) as Partial<MediaSpeedEnhancerSettings> & {
+      /** v1.0.27 旧版字段：与 toolbarAutoHide 语义相反 */
+      alwaysExpand?: boolean;
+    };
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, stored, {
+      enabledButtons: Object.assign(
+        {},
+        DEFAULT_SETTINGS.enabledButtons,
+        stored.enabledButtons ?? {}
+      ),
+      buttonOrder: this.normalizeButtonOrder(stored.buttonOrder),
+    });
+    // 兼容旧版本：若旧数据只有“始终展开所有按钮”，转换为统一的自动隐藏开关。
+    if (!("toolbarAutoHide" in stored) && typeof stored.alwaysExpand === "boolean") {
+      this.settings.toolbarAutoHide = !stored.alwaysExpand;
+    }
 
     // P1-6: 校验旧数据 customSpeeds（如果磁盘上的值超出 0.25-4.0 则归一化）
     this.settings.customSpeeds = parseCustomSpeeds(
@@ -175,6 +200,9 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     );
 
     this.addSettingTab(new MediaSpeedEnhancerSettingTab(this.app, this));
+
+    // v1.0.36: 注册命令，让 4 个按钮均可绑定快捷键（作用目标 = 当前/最近使用的媒体）
+    this.registerCommands();
 
     // P1-4: observer 回调中对每个节点 try/catch，单点异常不影响后续节点
     // v1.0.2: 重写为 handleMutations，新增对节点内嵌套 media 的递归扫描
@@ -242,7 +270,36 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const stored = (await this.loadData()) as Partial<MediaSpeedEnhancerSettings> & {
+      alwaysExpand?: boolean;
+    };
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, stored, {
+      enabledButtons: Object.assign(
+        {},
+        DEFAULT_SETTINGS.enabledButtons,
+        stored.enabledButtons ?? {}
+      ),
+      buttonOrder: this.normalizeButtonOrder(stored.buttonOrder),
+    });
+    if (!("toolbarAutoHide" in stored) && typeof stored.alwaysExpand === "boolean") {
+      this.settings.toolbarAutoHide = !stored.alwaysExpand;
+    }
+  }
+
+  private normalizeButtonOrder(order: unknown): ButtonId[] {
+    const valid = new Set<ButtonId>([
+      "skipBack",
+      "skipForward",
+      "holdSpeed",
+      "playPause",
+    ]);
+    const normalized = Array.isArray(order)
+      ? order.filter((id): id is ButtonId => valid.has(id as ButtonId))
+      : [];
+    for (const id of DEFAULT_SETTINGS.buttonOrder) {
+      if (!normalized.includes(id)) normalized.push(id);
+    }
+    return normalized;
   }
 
   async saveSettings(): Promise<void> {
@@ -250,38 +307,104 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   }
 
   // ------------------------------------------------------------------
-  // P1-5: showButtons 动态开关 — 供 SettingTab 调用
+  // v1.0.36: 快捷键命令
   // ------------------------------------------------------------------
 
   /**
-   * 根据当前 settings.showButtons 状态重建所有工具栏：
-   * - false：移除所有已注入的工具栏 + anchor 包装
-   * - true：扫描整个 DOM，对所有未注入 / 已失效的 media 重新注入
+   * 注册 4 个命令，对应 4 个功能按钮。
+   * 命令不带默认 hotkey（官方建议避免与其它插件/用户冲突），
+   * 用户可在 Obsidian「设置 → 快捷键」中自由绑定。
    */
-  async refreshAllToolbars(): Promise<void> {
-    if (!this.settings.showButtons) {
-      for (const cleanup of this.allCleanups) {
-        for (const fn of cleanup.cleanups) {
-try {
-            fn();
-          } catch {
-            /* ignore */
-          }
-        }
-        // v1.0.3: 移除 controlsWrap 一次性清理 anchor + toolbar
-        try {
-          cleanup.controlsWrap.remove();
-        } catch {
-          /* ignore */
-        }
-      }
-      this.allCleanups.clear();
-      // WeakMap 的条目随 mediaEl 被 GC 时自动清理
-      return;
-    }
+  private registerCommands(): void {
+    this.addCommand({
+      id: "media-speed-enhancer-skip-back",
+      name: "后退 N 秒",
+      callback: () => {
+        const el = this.getLastActiveMedia();
+        if (el) this.skipMedia(el, -this.settings.skipSeconds);
+      },
+    });
 
-    // v1.0.13 fix: 先移除所有已有 toolbar，再全量重新注入
-    // 确保设置变更（alwaysExpand, enablePlayPause 等）对已有 media 生效
+    this.addCommand({
+      id: "media-speed-enhancer-skip-forward",
+      name: "前进 N 秒",
+      callback: () => {
+        const el = this.getLastActiveMedia();
+        if (el) this.skipMedia(el, this.settings.skipSeconds);
+      },
+    });
+
+    this.addCommand({
+      id: "media-speed-enhancer-toggle-hold-speed",
+      name: "切换临时倍速",
+      callback: () => {
+        const el = this.getLastActiveMedia();
+        if (el) this.toggleHoldSpeed(el);
+      },
+    });
+
+    this.addCommand({
+      id: "media-speed-enhancer-toggle-play-pause",
+      name: "播放 / 暂停",
+      callback: () => {
+        const el = this.getLastActiveMedia();
+        if (el) this.togglePlayPause(el);
+      },
+    });
+  }
+
+  /** 返回当前/最近使用的媒体（已从 DOM 移除则忽略）。 */
+  private getLastActiveMedia(): HTMLMediaElement | null {
+    const el = this.lastActiveMedia;
+    if (!el) return null;
+    if (!el.isConnected) {
+      this.lastActiveMedia = null;
+      return null;
+    }
+    return el;
+  }
+
+  /** 在媒体发生"被使用"时记录为目标，供快捷键命令定位。 */
+  private trackActiveMedia(mediaEl: HTMLMediaElement): void {
+    this.lastActiveMedia = mediaEl;
+  }
+
+  private skipMedia(el: HTMLMediaElement, delta: number): void {
+    const duration = Number.isFinite(el.duration) ? el.duration : Infinity;
+    const next = el.currentTime + delta;
+    el.currentTime = Math.max(0, Math.min(duration, next));
+  }
+
+  /**
+   * 快捷键版"按住临时倍速"：按一次开启临时倍速，再按一次恢复原始倍速。
+   * 用 WeakMap 记录每个媒体的原始 playbackRate，避免与按钮按住逻辑互相覆盖。
+   */
+  private toggleHoldSpeed(el: HTMLMediaElement): void {
+    if (this.holdSpeedOrigins.has(el)) {
+      const orig = this.holdSpeedOrigins.get(el)!;
+      el.playbackRate = orig;
+      this.holdSpeedOrigins.delete(el);
+    } else {
+      this.holdSpeedOrigins.set(el, el.playbackRate);
+      el.playbackRate = this.settings.tempSpeed;
+    }
+  }
+
+  private togglePlayPause(el: HTMLMediaElement): void {
+    if (el.paused) {
+      void el.play();
+    } else {
+      el.pause();
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 设置变更后重建现有工具栏
+  // ------------------------------------------------------------------
+
+  /** 根据当前设置重建所有已注入的工具栏。 */
+  async refreshAllToolbars(): Promise<void> {
+    // 先移除所有已有 toolbar，再全量重新注入，确保设置变更立即生效。
     const existingCleanups = [...this.allCleanups];
     for (const cleanup of existingCleanups) {
       for (const fn of cleanup.cleanups) {
@@ -393,7 +516,16 @@ try {
   }
 
   private tryInject(mediaEl: HTMLMediaElement): void {
-    if (!this.shouldInject(mediaEl)) return;
+    // v1.0.29: 任何时候都先登记一次 metadata/durationchange 监听，
+    // 以便 metadata 尚未就绪时延后判断“最短时长过滤”。
+    this.scheduleDurationRecheck(mediaEl);
+
+    if (!this.shouldInject(mediaEl)) {
+      // v1.0.31: 若媒体已经被注入了按钮，但当前条件不再满足
+      // （如刚启用“最短时长过滤”），则主动清理，避免遗留按钮。
+      this.removeInjectedIfPresent(mediaEl);
+      return;
+    }
 
     // P1-10: 检查已注入条目是否还有效（DOM 可能被替换）
     const existing = this.injectedMap.get(mediaEl);
@@ -408,12 +540,37 @@ try {
       this.removeCleanup(existing, mediaEl);
     }
 
-    // P1-5: showButtons=false 时不标记、不注入；下次切换为 true 时由 refreshAllToolbars 重新扫描
-    if (!this.settings.showButtons) {
-      return;
-    }
-
     this.injectToolbar(mediaEl);
+  }
+
+  private removeInjectedIfPresent(mediaEl: HTMLMediaElement): void {
+    const existing = this.injectedMap.get(mediaEl);
+    if (!existing) return;
+    this.removeCleanup(existing, mediaEl);
+  }
+
+  /**
+   * v1.0.29: 监听 media 的 loadedmetadata / durationchange 事件。
+   * 当初次扫描时元数据尚未就绪（mediaEl.duration === NaN），会在元数据
+   * 可用后再次尝试注入，从而让“最短时长过滤”真正生效。
+   * 通过 WeakSet 防止对同一元素重复绑定。
+   */
+  private readonly durationRecheckSet: WeakSet<HTMLMediaElement> = new WeakSet();
+
+  private scheduleDurationRecheck(mediaEl: HTMLMediaElement): void {
+    if (this.durationRecheckSet.has(mediaEl)) return;
+    this.durationRecheckSet.add(mediaEl);
+    const retry = () => {
+      this.tryInject(mediaEl);
+    };
+    const events: Array<keyof HTMLMediaElementEventMap> = [
+      "loadedmetadata",
+      "durationchange",
+      "canplay",
+    ];
+    for (const evt of events) {
+      mediaEl.addEventListener(evt, retry, { once: true });
+    }
   }
 
   private removeCleanup(
@@ -533,12 +690,9 @@ try {
     const controlsWrap = document.createElement("div");
     controlsWrap.className = CLS.controlsWrap;
 
-    // v1.0.13: 设置 mse-always-expand 类，让 toolbar 常驻展开
-    if (this.settings.alwaysExpand) {
+    // 统一使用“工具栏自动隐藏”控制展开行为，避免与“始终展开”重复。
+    if (!this.settings.toolbarAutoHide) {
       controlsWrap.classList.add("mse-always-expand");
-      if (this.settings.enablePlayPause) {
-        controlsWrap.classList.add("mse-with-play");
-      }
     }
 
     // v1.0.10: 移除 anchor-wrap div，直接把 anchor 按钮放进 controls-wrap
@@ -550,6 +704,13 @@ try {
     }
 
     const anchor = this.createAnchorButton(mediaEl);
+
+    // v1.0.36: 追踪"当前/最近使用"的媒体，供快捷键命令定位目标。
+    const activeBag = new ListenerBag();
+    activeBag.add(mediaEl, "play", () => this.trackActiveMedia(mediaEl));
+    activeBag.add(mediaEl, "pause", () => this.trackActiveMedia(mediaEl));
+    activeBag.add(mediaEl, "click", () => this.trackActiveMedia(mediaEl));
+    activeBag.add(mediaEl, "ratechange", () => this.trackActiveMedia(mediaEl));
 
     // v1.0.27: 按 settings.buttonOrder 顺序，根据 enabledButtons 创建启用的按钮
     const orderedEnabled: ButtonResult[] = [];
@@ -597,11 +758,12 @@ try {
     const PADDING_LEFT = 4;
     const RIGHT_GAP = 4;
 
-    // 计算 hover 状态时 toolbar 目标宽度
+    // 只按实际创建的按钮计算展开宽度；关闭的按钮不会留下空白占位。
     const computeToolbarWidth = () => {
-      // 3 按钮 + 2 gap = 128；4 按钮 + 3 gap = 172
-      const buttonCount = (this.settings.enablePlayPause ? 4 : 3);
-      return buttonCount * ANCHOR_WIDTH + (buttonCount - 1) * GAP;
+      const buttonCount = orderedEnabled.length;
+      return buttonCount === 0
+        ? 0
+        : buttonCount * ANCHOR_WIDTH + (buttonCount - 1) * GAP;
     };
 
     const computeWrapWidth = (toolbarWidth: number) => {
@@ -621,15 +783,14 @@ try {
       setAudioPosition(computeWrapWidth(toolbarWidth));
     };
 
-    // 设置 initial 状态
-    if (this.settings.alwaysExpand) {
+    if (!this.settings.toolbarAutoHide) {
       setExpanded(true);
     } else {
       setExpanded(false);
     }
 
-    // mouseenter/leave 立即同步展开/收起
-    if (!this.settings.alwaysExpand) {
+    // 自动隐藏关闭时常驻展开；开启时仅 hover 控件组展开。
+    if (this.settings.toolbarAutoHide) {
       controlsWrap.addEventListener("mouseenter", () => setExpanded(true));
       controlsWrap.addEventListener("mouseleave", () => setExpanded(false));
     }
@@ -640,6 +801,7 @@ try {
       cleanups: [
         anchor.cleanups,
         ...orderedEnabled.map((b) => b.cleanups),
+        () => activeBag.clear(),
         () => {
           // v1.0.25: 清理 inline style 和事件监听
           controlsWrap.removeEventListener("mouseenter", () => setExpanded(true));

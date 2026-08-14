@@ -53,6 +53,12 @@
 /* ---------------------------------------------------------------------------
    所有按钮：统一 40px 高、彻底扁平、无阴影
    --------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+   v1.0.32: 按钮背景透明度可调
+   通过 :root CSS 变量 `--mse-btn-opacity` 与 `--mse-btn-hover-opacity`
+   在运行时由 JS 注入，避免每张样式表写死 0.06 / 0.16。
+   默认值仍保留 fallback 以保证未注入变量时按钮仍可见。
+   --------------------------------------------------------------------------- */
 .mse-anchor,
 .mse-btn {
   display: inline-flex;
@@ -66,8 +72,12 @@
   padding: 0;
   border: 1px solid rgba(127, 127, 127, 0.14);
   border-radius: 8px;
-  /* v1.0.20: 更透明的中性灰背景（10% → 6%），仅"非常淡"的区分 */
-  background: rgba(127, 127, 127, 0.06) !important;
+  background: rgba(
+    127,
+    127,
+    127,
+    var(--mse-btn-opacity, 0.06)
+  ) !important;
   box-shadow: none !important;
   text-shadow: none !important;
   color: var(--text-muted, #888);
@@ -84,7 +94,12 @@
 /* 仅 hover 时有微妙的背景变化（和原生一样） */
 .mse-anchor:hover,
 .mse-btn:hover {
-  background: rgba(127, 127, 127, 0.16) !important;
+  background: rgba(
+    127,
+    127,
+    127,
+    var(--mse-btn-hover-opacity, 0.16)
+  ) !important;
   color: var(--text-normal, #fff);
   border-color: rgba(127, 127, 127, 0.28) !important;
 }
@@ -295,13 +310,27 @@
   padding-top: 16px;
   border-top: 1px solid var(--background-modifier-border);
 }
-.mse-settings-section-title {
-  font-size: 12px;
+.mse-settings-section:first-of-type {
+  margin-top: 12px;
+}
+.mse-settings-heading {
+  margin: 0 0 6px 0;
+  font-size: 18px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-faint);
-  margin-bottom: 12px;
+  color: var(--text-normal);
+  letter-spacing: -0.2px;
+}
+.mse-settings-subheading {
+  margin: 16px 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+.mse-settings-hint {
+  margin: 0 0 12px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .mse-textarea {
   width: 280px;
@@ -315,101 +344,116 @@
 }
 
 /* ---------------------------------------------------------------------------
-   小屏
+   设置面板：按钮配置分组（v1.0.27，重构于 v1.0.33）
    --------------------------------------------------------------------------- */
 
-/* ---------------------------------------------------------------------------
-   设置面板：按钮配置分组（v1.0.27）
-   --------------------------------------------------------------------------- */
-.mse-settings-section {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--background-modifier-border);
-}
-
-.mse-settings-section h3 {
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-normal);
-}
-
-/* 按钮开关列表 */
-.mse-button-toggle-list {
-  margin-top: 8px;
-  margin-bottom: 16px;
-}
-.mse-button-toggle-row {
-  display: flex;
-  align-items: flex-start;
-  padding: 6px 0;
-  gap: 8px;
-}
-.mse-button-toggle-row input[type="checkbox"] {
-  margin-top: 3px;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-.mse-button-toggle-row label {
-  flex: 1;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.mse-button-toggle-row label .setting-item-description {
-  font-size: 11px;
-  color: var(--text-faint);
-}
-
-/* 按钮排序（拖拽） */
+/* 按钮配置：每一行同时承载拖拽排序与启用开关 */
 .mse-button-order-list {
   margin-top: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   background: var(--background-primary);
 }
 .mse-button-order-row {
   display: flex;
   align-items: center;
+  min-height: 52px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--background-modifier-border);
   cursor: grab;
   transition: background 0.12s ease;
   user-select: none;
+  gap: 4px;
 }
-.mse-button-order-row:last-child {
-  border-bottom: none;
-}
-.mse-button-order-row:hover {
-  background: var(--background-modifier-hover);
-}
+.mse-button-order-row:last-child { border-bottom: none; }
+.mse-button-order-row:hover { background: var(--background-modifier-hover); }
 .mse-button-order-row.mse-dragging {
   opacity: 0.5;
   background: var(--background-modifier-active-hover);
 }
 .mse-button-order-row.mse-drag-over {
   background: var(--background-modifier-hover);
-  border-top: 2px solid var(--interactive-accent);
+  box-shadow: inset 0 2px 0 var(--interactive-accent);
 }
 .mse-button-order-handle {
-  margin-right: 12px;
-  font-size: 16px;
+  width: 24px;
+  margin-right: 6px;
+  font-size: 18px;
+  line-height: 1;
   color: var(--text-faint);
   cursor: grab;
-  user-select: none;
+  text-align: center;
+  flex: 0 0 auto;
 }
-.mse-button-order-handle:active {
-  cursor: grabbing;
+.mse-button-order-handle:active { cursor: grabbing; }
+.mse-button-order-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  margin-left: 4px;
 }
 .mse-button-order-label {
-  flex: 1;
   font-size: 13px;
+  color: var(--text-normal);
+}
+.mse-button-order-desc {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mse-button-order-toggle {
+  flex: 0 0 auto;
+  margin-left: 12px;
+  cursor: pointer;
 }
 
-/* 设置区块 section heading Obsidian 风格化 */
+/* 子设置区：当按钮关闭时折叠显示 */
+.mse-button-sub {
+  margin: -4px 12px 12px 36px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  border-radius: 0 6px 6px 0;
+}
+.mse-button-sub-head {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+.mse-button-sub-body .setting-item {
+  border-top: 1px solid var(--background-modifier-border);
+  padding: 8px 0;
+}
+.mse-button-sub-body .setting-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+/* 按钮列表底部：说明 + 还原默认值 */
+.mse-button-list-wrap .mse-footer-row {
+  border-top: none;
+  padding-top: 4px;
+}
+.mse-button-list-wrap .mse-footer-row .setting-item-control {
+  justify-content: flex-end;
+}
+.mse-button-order-row--disabled {
+  opacity: 0.45;
+}
+.mse-button-order-row--disabled .mse-button-order-label,
+.mse-button-order-row--disabled .mse-button-order-desc {
+  color: var(--text-faint);
+}
 @media (max-width: 480px) {
   .mse-container audio, .mse-container video {
     margin-left: 56px;
