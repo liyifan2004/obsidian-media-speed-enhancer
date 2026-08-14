@@ -353,15 +353,32 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     });
   }
 
-  /** 返回当前/最近使用的媒体（已从 DOM 移除则忽略）。 */
+  /** 返回当前/最近使用的媒体（已从 DOM 移除则尝试找回同源替换元素）。 */
   private getLastActiveMedia(): HTMLMediaElement | null {
-    const el = this.lastActiveMedia;
+    let el = this.lastActiveMedia;
     if (!el) return null;
     if (!el.isConnected) {
-      this.lastActiveMedia = null;
-      return null;
+      // v1.0.37: Obsidian 重渲染笔记/视图时会替换媒体元素（旧元素脱离 DOM），
+      // 此时尝试用 src 找回替换后的新元素，避免 4 个快捷键集体失效。
+      el = this.findMediaBySrc(el);
+      this.lastActiveMedia = el;
+      if (!el) return null;
     }
     return el;
+  }
+
+  /** 按 src 在当前 DOM 中找回同源媒体（媒体被重渲染替换时使用）。 */
+  private findMediaBySrc(oldEl: HTMLMediaElement): HTMLMediaElement | null {
+    const src = oldEl.currentSrc || oldEl.src;
+    if (!src) return null;
+    const all = document.querySelectorAll("audio, video");
+    for (const m of Array.from(all)) {
+      const cand = m as HTMLMediaElement;
+      if (cand !== oldEl && cand.isConnected && cand.currentSrc === src) {
+        return cand;
+      }
+    }
+    return null;
   }
 
   /** 在媒体发生"被使用"时记录为目标，供快捷键命令定位。 */
@@ -370,6 +387,8 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   }
 
   private skipMedia(el: HTMLMediaElement, delta: number): void {
+    // v1.0.37: 快捷键操作时显式确认目标，避免被其它事件干扰。
+    this.trackActiveMedia(el);
     const duration = Number.isFinite(el.duration) ? el.duration : Infinity;
     const next = el.currentTime + delta;
     el.currentTime = Math.max(0, Math.min(duration, next));
@@ -380,6 +399,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
    * 用 WeakMap 记录每个媒体的原始 playbackRate，避免与按钮按住逻辑互相覆盖。
    */
   private toggleHoldSpeed(el: HTMLMediaElement): void {
+    this.trackActiveMedia(el);
     if (this.holdSpeedOrigins.has(el)) {
       const orig = this.holdSpeedOrigins.get(el)!;
       el.playbackRate = orig;
@@ -391,6 +411,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   }
 
   private togglePlayPause(el: HTMLMediaElement): void {
+    this.trackActiveMedia(el);
     if (el.paused) {
       void el.play();
     } else {
@@ -706,11 +727,13 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     const anchor = this.createAnchorButton(mediaEl);
 
     // v1.0.36: 追踪"当前/最近使用"的媒体，供快捷键命令定位目标。
+    // v1.0.37: 不监听 ratechange——倍速变化是被动副作用（globalSync、
+    // 其它插件、恢复倍速等都会触发），会让 lastActiveMedia 被其它媒体抢走，
+    // 导致快捷键突然作用到别的音频。只保留用户主动交互信号。
     const activeBag = new ListenerBag();
     activeBag.add(mediaEl, "play", () => this.trackActiveMedia(mediaEl));
     activeBag.add(mediaEl, "pause", () => this.trackActiveMedia(mediaEl));
     activeBag.add(mediaEl, "click", () => this.trackActiveMedia(mediaEl));
-    activeBag.add(mediaEl, "ratechange", () => this.trackActiveMedia(mediaEl));
 
     // v1.0.27: 按 settings.buttonOrder 顺序，根据 enabledButtons 创建启用的按钮
     const orderedEnabled: ButtonResult[] = [];
