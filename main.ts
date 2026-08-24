@@ -420,6 +420,98 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   }
 
   // ------------------------------------------------------------------
+  // v1.0.38: 顺序播放 + 切换提示音
+  // ------------------------------------------------------------------
+
+  /**
+   * 找当前媒体所在 Markdown 视图里的下一个媒体元素并播放。
+   *
+   * 算法：
+   * 1. 向上找最近的 `.workspace-leaf-content`（Obsidian Markdown 视图容器）；
+   * 2. 在该容器里查所有 `audio`/`video` 元素；
+   * 3. 用 `compareDocumentPosition` 按 DOM 顺序排序；
+   * 4. 找当前媒体之后的下一个媒体；
+   * 5. 播放提示音（如果启用）→ 调 `next.play()`。
+   */
+  private async playSequentialNext(mediaEl: HTMLMediaElement): Promise<void> {
+    const view = mediaEl.closest(".workspace-leaf-content");
+    if (!view) return;
+
+    // 在容器里找所有 media 元素，过滤掉 src 为空的（未加载）
+    const medias = Array.from(
+      view.querySelectorAll("audio, video")
+    ) as HTMLMediaElement[];
+    if (medias.length < 2) return;
+
+    // 按 DOM 顺序排序
+    medias.sort((a, b) => {
+      if (a === b) return 0;
+      const pos = a.compareDocumentPosition(b);
+      if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      return 0;
+    });
+
+    const idx = medias.indexOf(mediaEl);
+    if (idx === -1) return;
+    if (idx >= medias.length - 1) return; // 已是最后一个
+
+    const next = medias[idx + 1];
+
+    // 切换前播提示音（如果启用）
+    if (this.settings.sequentialPlayTone) {
+      await this.playTransitionTone();
+    }
+
+    // 滚动下一个媒体进入视野（用户体验更好）
+    try {
+      next.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch {
+      /* ignore */
+    }
+
+    // 播放下一个
+    try {
+      await next.play();
+    } catch (e) {
+      console.warn("[media-speed-enhancer] sequential next play failed:", e);
+    }
+  }
+
+  /**
+   * 用 Web Audio API 播放 660Hz 短促提示音（约 0.3s）。
+   * 用完后自动释放 AudioContext。
+   */
+  private async playTransitionTone(): Promise<void> {
+    try {
+      const Ctor: typeof AudioContext =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext!;
+      if (!Ctor) return;
+      const ctx = new Ctor();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = 660;
+      const t0 = ctx.currentTime;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(0.18, t0 + 0.02);
+      gain.gain.linearRampToValueAtTime(0, t0 + 0.3);
+      osc.start(t0);
+      osc.stop(t0 + 0.32);
+      // 等提示音结束后释放 AudioContext
+      osc.onended = () => {
+        ctx.close().catch(() => undefined);
+      };
+    } catch (e) {
+      // 提示音是增强体验，失败不影响主流程
+    }
+  }
+
+  // ------------------------------------------------------------------
   // 设置变更后重建现有工具栏
   // ------------------------------------------------------------------
 
@@ -734,6 +826,14 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     activeBag.add(mediaEl, "play", () => this.trackActiveMedia(mediaEl));
     activeBag.add(mediaEl, "pause", () => this.trackActiveMedia(mediaEl));
     activeBag.add(mediaEl, "click", () => this.trackActiveMedia(mediaEl));
+
+    // v1.0.38: 顺序播放——音频 ended 后自动播放同 Markdown 视图中的下一个媒体。
+    // 监听始终挂载（不受 enableSequentialPlay 影响），回调里读最新设置，
+    // 这样用户切换设置不需要重渲染已存在的工具栏。
+    activeBag.add(mediaEl, "ended", () => {
+      if (!this.settings.enableSequentialPlay) return;
+      this.playSequentialNext(mediaEl).catch(() => undefined);
+    });
 
     // v1.0.27: 按 settings.buttonOrder 顺序，根据 enabledButtons 创建启用的按钮
     const orderedEnabled: ButtonResult[] = [];

@@ -71,6 +71,10 @@ export interface MediaSpeedEnhancerSettings {
   globalSync: boolean;
   enableMinDuration: boolean;
   minDurationSeconds: number;
+  /** v1.0.38: 启用顺序播放——音频 ended 后自动播放同 Markdown 中的下一个 */
+  enableSequentialPlay: boolean;
+  /** v1.0.38: 切换音频时播放短促提示音 */
+  sequentialPlayTone: boolean;
   enabledButtons: Record<ButtonId, boolean>;
   buttonOrder: ButtonId[];
   buttonOpacity: number;
@@ -92,6 +96,8 @@ export const DEFAULT_SETTINGS: MediaSpeedEnhancerSettings = {
   globalSync: false,
   enableMinDuration: false,
   minDurationSeconds: 30,
+  enableSequentialPlay: false,
+  sequentialPlayTone: true,
   enabledButtons: Object.fromEntries(
     BUTTON_META.map((b) => [b.id, b.defaultEnabled])
   ) as Record<ButtonId, boolean>,
@@ -368,6 +374,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     // 最短时长秒数 = enableMinDuration 子项；也按 disabled 处理。
     const minEnabled = !!this.plugin.settings.enableMinDuration;
     this.minDurationSetting?.setDisabled(!minEnabled);
+
+    // v1.0.38: 切换音频提示音 = enableSequentialPlay 子项。
+    const seqEnabled = !!this.plugin.settings.enableSequentialPlay;
+    this.seqToneSetting?.setDisabled(!seqEnabled);
   }
 
   // ===========================================================================
@@ -526,6 +536,8 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   // 4) 工具栏
   // ===========================================================================
   private minDurationSetting: Setting | null = null;
+  /** v1.0.38: 顺序播放的"切换音频提示音"开关，未启用顺序播放时禁用 */
+  private seqToneSetting: Setting | null = null;
 
   private renderToolbarSection(root: HTMLElement): void {
     root.createEl("h3", { text: "工具栏", cls: "mse-settings-heading" });
@@ -594,6 +606,51 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     );
 
     this.minDurationSetting = minDurationSetting;
+
+    // v1.0.38: 顺序播放（同一 Markdown 笔记里的音频自动连播）
+    new Setting(root)
+      .setName("启用顺序播放")
+      .setDesc("开启后，当前音频播放完会自动播放同一笔记中的下一个音频。")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.enableSequentialPlay)
+          .onChange(async (value) => {
+            this.plugin.settings.enableSequentialPlay = value;
+            await this.plugin.saveSettings();
+            this.refreshDependentSettingStates();
+          })
+      );
+
+    const seqToneSetting = new Setting(root)
+      .setName("切换音频提示音")
+      .setDesc("顺序播放切换到下一个音频时播放 660Hz 短促提示音。");
+
+    seqToneSetting.addToggle((toggle) =>
+      toggle
+        .setValue(this.plugin.settings.sequentialPlayTone)
+        .onChange(async (value) => {
+          this.plugin.settings.sequentialPlayTone = value;
+          await this.plugin.saveSettings();
+        })
+    );
+
+    seqToneSetting.addExtraButton((btn) =>
+      btn
+        .setIcon("rotate-ccw")
+        .setTooltip("还原默认值")
+        .onClick(async () => {
+          this.plugin.settings.sequentialPlayTone =
+            DEFAULT_SETTINGS.sequentialPlayTone;
+          await this.plugin.saveSettings();
+          const input = seqToneSetting.controlEl.querySelector(
+            "input[type='checkbox']"
+          ) as HTMLInputElement | null;
+          if (input) input.checked = DEFAULT_SETTINGS.sequentialPlayTone;
+        })
+    );
+
+    this.seqToneSetting = seqToneSetting;
+
     this.refreshDependentSettingStates();
   }
 
