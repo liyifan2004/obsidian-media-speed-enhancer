@@ -1,5 +1,9 @@
 # Media Speed Enhancer
 
+[![Release](https://img.shields.io/github/v/release/liyifan2004/obsidian-media-speed-enhancer?style=flat-square)](https://github.com/liyifan2004/obsidian-media-speed-enhancer/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Obsidian plugin](https://img.shields.io/badge/Obsidian-Plugin-purple?style=flat-square)](https://obsidian.md)
+
 > 在 Obsidian 原生 HTML5 音频/视频播放器上叠加极简的增强工具栏：
 > **←10s** / **→10s** / **按住倍速** / **调整倍速**。最小侵入、不替换原生 UI。
 
@@ -98,4 +102,4 @@ npm run dev        # watch 模式，自动重建
 
 ## License
 
-MIT
+[MIT](LICENSE)
