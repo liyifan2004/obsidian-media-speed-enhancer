@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon.png" alt="Media Speed Enhancer icon" width="96" />
+</p>
+
 # Media Speed Enhancer
 
 [![Release](https://img.shields.io/github/v/release/liyifan2004/obsidian-media-speed-enhancer?style=flat-square)](https://github.com/liyifan2004/obsidian-media-speed-enhancer/releases)
