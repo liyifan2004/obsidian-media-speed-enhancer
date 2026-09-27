@@ -22,6 +22,16 @@
 
 另外，工具栏左侧始终显示一个紧凑的 **当前倍速徽标**（例如 `1.5×`），单击重置为 `1.0×`，右键同样弹出倍速菜单。
 
+## 演示
+
+原生播放器（对照）：
+
+![原生播放器](assets/demo-native.gif)
+
+增强后（←10s / →10s / 按住倍速 / 当前倍速徽标）：
+
+![增强后的播放工具栏](assets/demo-enhanced.gif)
+
 ## 安装（开发者模式）
 
 1. 克隆本仓库到 `<vault>/.obsidian/plugins/media-speed-enhancer/`。
@@ -43,6 +53,8 @@
 ## 设置项
 
 打开 Obsidian → 设置 → Media Speed Enhancer：
+
+![Media Speed Enhancer 设置页](assets/settings.png)
 
 | 设置 | 说明 | 默认值 |
 | --- | --- | --- |
