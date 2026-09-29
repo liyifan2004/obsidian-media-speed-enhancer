@@ -1,9 +1,10 @@
 {
   "id": "media-speed-enhancer",
   "name": "Media Speed Enhancer",
-  "version": "1.0.38",
+  "version": "1.0.39",
   "minAppVersion": "1.5.0",
-  "description": "在原生 HTML5 播放器上增加 10s 跳转、按住倍速、自定义倍速切换等最小侵入式增强",
-  "author": "李轶凡",
-  "isDesktopOnly": false
+  "description": "Add 10s skip, hold-to-speed, and a custom speed menu to the native HTML5 audio and video players.",
+  "author": "Li Yifan",
+  "isDesktopOnly": false,
+  "authorUrl": "https://github.com/liyifan2004"
 }
