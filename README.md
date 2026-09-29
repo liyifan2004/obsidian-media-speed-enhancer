@@ -8,6 +8,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Obsidian plugin](https://img.shields.io/badge/Obsidian-Plugin-purple?style=flat-square)](https://obsidian.md)
 
+简体中文 | [English](README.en.md)
+
 > 在 Obsidian 原生 HTML5 音频/视频播放器上叠加极简的增强工具栏：
 > **←10s** / **→10s** / **按住倍速** / **调整倍速**。最小侵入、不替换原生 UI。
 
@@ -26,11 +28,13 @@
 
 原生播放器（对照）：
 
-![原生播放器](assets/demo-native.gif)
+![原生播放器](assets/native-player.png)
 
 增强后（←10s / →10s / 按住倍速 / 当前倍速徽标）：
 
-![增强后的播放工具栏](assets/demo-enhanced.gif)
+![增强后演示一](assets/demo-1.gif)
+
+![增强后演示二](assets/demo-2.gif)
 
 ## 安装（开发者模式）
 

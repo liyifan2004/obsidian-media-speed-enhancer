@@ -1,4 +1,5 @@
 import { App, PluginSettingTab, Setting, SliderComponent } from "obsidian";
+import { t } from "./i18n";
 import type MediaSpeedEnhancerPlugin from "./main";
 
 /**
@@ -38,26 +39,26 @@ export interface ButtonMeta {
 export const BUTTON_META: ButtonMeta[] = [
   {
     id: "skipBack",
-    name: "后退",
-    description: "单击后退 N 秒",
+    name: t("btnSkipBack"),
+    description: t("btnSkipBackDesc"),
     defaultEnabled: true,
   },
   {
     id: "skipForward",
-    name: "前进",
-    description: "单击前进 N 秒",
+    name: t("btnSkipFwd"),
+    description: t("btnSkipFwdDesc"),
     defaultEnabled: true,
   },
   {
     id: "holdSpeed",
-    name: "按住临时倍速",
-    description: "按住临时加速，松开恢复",
+    name: t("btnTempSpeed"),
+    description: t("btnTempSpeedDesc"),
     defaultEnabled: true,
   },
   {
     id: "playPause",
-    name: "播放/暂停",
-    description: "额外提供一个播放/暂停按钮",
+    name: t("btnPlayPause"),
+    description: t("btnPlayPauseDesc"),
     defaultEnabled: false,
   },
 ];
@@ -192,18 +193,18 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   // 1) 按钮
   // ===========================================================================
   private renderButtonsSection(root: HTMLElement): void {
-    root.createEl("h3", { text: "按钮", cls: "mse-settings-heading" });
+    root.createEl("h3", { text: t("headingButtons"), cls: "mse-settings-heading" });
 
     // 容器化列表：刷新列表（拖拽排序 / 还原默认）只清空容器，不影响 slider。
     this.buttonListContainer = root.createDiv({ cls: "mse-button-list-wrap" });
     this.renderButtonList(this.buttonListContainer);
 
-    root.createEl("h4", { text: "按钮外观", cls: "mse-settings-subheading" });
+    root.createEl("h4", { text: t("headingButtonAppearance"), cls: "mse-settings-subheading" });
 
     this.renderOpacitySlider(
       root,
-      "按钮背景透明度",
-      "0=透明，100=实色。",
+      t("labelBgOpacity"),
+      t("descBgOpacity"),
       this.plugin.settings.buttonOpacity,
       "buttonOpacity",
       (v) => {
@@ -217,8 +218,8 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
 
     this.renderOpacitySlider(
       root,
-      "按钮 hover 背景透明度",
-      "鼠标悬停时的背景透明度。",
+      t("labelHoverOpacity"),
+      t("descHoverOpacity"),
       this.plugin.settings.buttonHoverOpacity,
       "buttonHoverOpacity",
       (v) => {
@@ -263,7 +264,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       const toggle = row.createEl("input", {
         type: "checkbox",
         cls: "mse-button-order-toggle",
-        attr: { "aria-label": `启用${meta.name}` },
+        attr: { "aria-label": t("enableBtnAria", { name: meta.name }) },
       });
       toggle.checked = this.plugin.settings.enabledButtons[id];
       this.applyButtonRowState(row, toggle.checked);
@@ -327,10 +328,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     // 列表底部：简短提示 + 标准化的"重置"按钮（用 Setting.addButton 渲染，
     // 与 Obsidian 核心插件的 "查看 / 删除" 按钮保持一致风格）。
     const footer = new Setting(container)
-      .setName("拖拽调整顺序，勾选启用。")
+      .setName(t("dragHint"))
       .addButton((btn) =>
         btn
-          .setButtonText("重置")
+          .setButtonText(t("reset"))
           .setWarning()
           .onClick(async () => {
             this.plugin.settings.buttonOrder = BUTTON_META.map((b) => b.id);
@@ -384,11 +385,11 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   // 2) 倍速
   // ===========================================================================
   private renderSpeedSection(root: HTMLElement): void {
-    root.createEl("h3", { text: "倍速", cls: "mse-settings-heading" });
+    root.createEl("h3", { text: t("headingSpeed"), cls: "mse-settings-heading" });
 
     const speedSetting = new Setting(root)
-      .setName("临时倍速")
-      .setDesc("按住『按住倍速』按钮时使用的 playbackRate。");
+      .setName(t("labelTempSpeed"))
+      .setDesc(t("descTempSpeed"));
 
     speedSetting.addText((text) => {
       text.setValue(String(this.plugin.settings.tempSpeed))
@@ -408,7 +409,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     speedSetting.addExtraButton((btn) =>
       btn
         .setIcon("rotate-ccw")
-        .setTooltip("还原默认值")
+        .setTooltip(t("resetTooltip"))
         .onClick(async () => {
           this.plugin.settings.tempSpeed = DEFAULT_SETTINGS.tempSpeed;
           await this.plugin.saveSettings();
@@ -427,9 +428,9 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       this.plugin.settings.customSpeeds
     );
     const speedsSetting = new Setting(root)
-      .setName("自定义倍速列表")
+      .setName(t("labelCustomSpeeds"))
       .setDesc(
-        `每行一个数字，范围 ${SPEED_MIN}-${SPEED_MAX}。点击空白处保存。`
+        t("descCustomSpeeds", { min: SPEED_MIN, max: SPEED_MAX })
       );
 
     speedsSetting.addTextArea((text) => {
@@ -455,7 +456,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     speedsSetting.addExtraButton((btn) =>
       btn
         .setIcon("rotate-ccw")
-        .setTooltip("还原默认值")
+        .setTooltip(t("resetTooltip"))
         .onClick(async () => {
           this.plugin.settings.customSpeeds = [...DEFAULT_CUSTOM_SPEEDS];
           await this.plugin.saveSettings();
@@ -468,8 +469,8 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     );
 
     new Setting(root)
-      .setName("全局倍速同步")
-      .setDesc("调整任意媒体的倍速时，自动同步到所有打开的媒体。")
+      .setName(t("labelGlobalSync"))
+      .setDesc(t("descGlobalSync"))
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.globalSync)
@@ -485,11 +486,11 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   // 3) 跳转
   // ===========================================================================
   private renderSkipSection(root: HTMLElement): void {
-    root.createEl("h3", { text: "跳转", cls: "mse-settings-heading" });
+    root.createEl("h3", { text: t("headingSkip"), cls: "mse-settings-heading" });
 
     const skipSetting = new Setting(root)
-      .setName("后退 / 前进秒数")
-      .setDesc("点击『后退』/『前进』按钮时跳转的秒数。");
+      .setName(t("labelSkipSeconds"))
+      .setDesc(t("descSkipSeconds"));
 
     skipSetting.addText((text) => {
       text.setValue(String(this.plugin.settings.skipSeconds))
@@ -516,7 +517,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     skipSetting.addExtraButton((btn) =>
       btn
         .setIcon("rotate-ccw")
-        .setTooltip("还原默认值")
+        .setTooltip(t("resetTooltip"))
         .onClick(async () => {
           this.plugin.settings.skipSeconds = DEFAULT_SETTINGS.skipSeconds;
           await this.plugin.saveSettings();
@@ -540,12 +541,12 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   private seqToneSetting: Setting | null = null;
 
   private renderToolbarSection(root: HTMLElement): void {
-    root.createEl("h3", { text: "工具栏", cls: "mse-settings-heading" });
+    root.createEl("h3", { text: t("headingToolbar"), cls: "mse-settings-heading" });
 
     new Setting(root)
-      .setName("工具栏自动隐藏")
+      .setName(t("labelAutoHide"))
       .setDesc(
-        "开启时仅在鼠标悬停在当前倍速按钮上时显示已启用的功能按钮；关闭则始终展开已启用的按钮。"
+        t("descAutoHide")
       )
       .addToggle((toggle) =>
         toggle
@@ -558,8 +559,8 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       );
 
     const minDurationToggleSetting = new Setting(root)
-      .setName("最短时长过滤")
-      .setDesc("开启后仅对超过指定秒数的媒体注入按钮，避免短音效被影响。");
+      .setName(t("labelMinDuration"))
+      .setDesc(t("descMinDuration"));
 
     minDurationToggleSetting.addToggle((toggle) =>
       toggle
@@ -573,8 +574,8 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     );
 
     const minDurationSetting = new Setting(root)
-      .setName("最短时长秒数")
-      .setDesc("低于此时长的媒体不显示任何按钮。");
+      .setName(t("labelMinDurationSeconds"))
+      .setDesc(t("descMinDurationSeconds"));
 
     minDurationSetting.addText((text) => {
       text.setValue(String(this.plugin.settings.minDurationSeconds))
@@ -594,7 +595,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     minDurationSetting.addExtraButton((btn) =>
       btn
         .setIcon("rotate-ccw")
-        .setTooltip("还原默认值")
+        .setTooltip(t("resetTooltip"))
         .onClick(async () => {
           this.plugin.settings.minDurationSeconds = DEFAULT_SETTINGS.minDurationSeconds;
           await this.plugin.saveSettings();
@@ -609,8 +610,8 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
 
     // v1.0.38: 顺序播放（同一 Markdown 笔记里的音频自动连播）
     new Setting(root)
-      .setName("启用顺序播放")
-      .setDesc("开启后，当前音频播放完会自动播放同一笔记中的下一个音频。")
+      .setName(t("labelAutoPlayNext"))
+      .setDesc(t("descAutoPlayNext"))
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.enableSequentialPlay)
@@ -622,8 +623,8 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       );
 
     const seqToneSetting = new Setting(root)
-      .setName("切换音频提示音")
-      .setDesc("顺序播放切换到下一个音频时播放 660Hz 短促提示音。");
+      .setName(t("labelSwitchChime"))
+      .setDesc(t("descSwitchChime"));
 
     seqToneSetting.addToggle((toggle) =>
       toggle
@@ -637,7 +638,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     seqToneSetting.addExtraButton((btn) =>
       btn
         .setIcon("rotate-ccw")
-        .setTooltip("还原默认值")
+        .setTooltip(t("resetTooltip"))
         .onClick(async () => {
           this.plugin.settings.sequentialPlayTone =
             DEFAULT_SETTINGS.sequentialPlayTone;
@@ -658,11 +659,11 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   // 5) 兼容性
   // ===========================================================================
   private renderCompatSection(root: HTMLElement): void {
-    root.createEl("h3", { text: "兼容性", cls: "mse-settings-heading" });
+    root.createEl("h3", { text: t("headingCompat"), cls: "mse-settings-heading" });
 
     new Setting(root)
-      .setName("启用触摸优化")
-      .setDesc("使用 pointer events 适配触屏；关闭时仅绑 mousedown/mouseup。")
+      .setName(t("labelTouch"))
+      .setDesc(t("descTouch"))
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.enableTouchOptimization)
@@ -703,7 +704,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     setting.addExtraButton((btn) =>
       btn
         .setIcon("rotate-ccw")
-        .setTooltip("还原默认值")
+        .setTooltip(t("resetTooltip"))
         .onClick(async () => {
           const def = DEFAULT_SETTINGS[settingKey];
           (this.plugin.settings as any)[settingKey] = def;

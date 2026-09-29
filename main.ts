@@ -1,5 +1,6 @@
 import { Plugin } from "obsidian";
-import type { ButtonId, MediaSpeedEnhancerSettings } from "./settings"; // P2-1: 类型单独 import，避免运行时循环依赖
+import type { ButtonId, MediaSpeedEnhancerSettings } from "./settings";
+import { t } from "./i18n"; // P2-1: 类型单独 import，避免运行时循环依赖
 import {
   DEFAULT_SETTINGS,
   MediaSpeedEnhancerSettingTab,
@@ -318,7 +319,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   private registerCommands(): void {
     this.addCommand({
       id: "media-speed-enhancer-skip-back",
-      name: "后退 N 秒",
+      name: t("cmdSkipBack"),
       callback: () => {
         const el = this.getLastActiveMedia();
         if (el) this.skipMedia(el, -this.settings.skipSeconds);
@@ -327,7 +328,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
 
     this.addCommand({
       id: "media-speed-enhancer-skip-forward",
-      name: "前进 N 秒",
+      name: t("cmdSkipFwd"),
       callback: () => {
         const el = this.getLastActiveMedia();
         if (el) this.skipMedia(el, this.settings.skipSeconds);
@@ -336,7 +337,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
 
     this.addCommand({
       id: "media-speed-enhancer-toggle-hold-speed",
-      name: "切换临时倍速",
+      name: t("cmdTempSpeed"),
       callback: () => {
         const el = this.getLastActiveMedia();
         if (el) this.toggleHoldSpeed(el);
@@ -345,7 +346,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
 
     this.addCommand({
       id: "media-speed-enhancer-toggle-play-pause",
-      name: "播放 / 暂停",
+      name: t("cmdPlayPause"),
       callback: () => {
         const el = this.getLastActiveMedia();
         if (el) this.togglePlayPause(el);
@@ -968,7 +969,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `${CLS.btn} ${CLS.anchor}`;
-    btn.setAttribute("aria-label", "当前倍速（点击打开倍速菜单）");
+    btn.setAttribute("aria-label", t("ariaAnchor"));
     btn.setAttribute("aria-haspopup", "menu");
 
     // v1.0.9: 合并 speed 文本 + 下拉图标到一个圆角矩形按钮
@@ -1036,8 +1037,8 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     btn.type = "button";
     btn.className = `${CLS.btn} ${isBack ? CLS.skipBack : CLS.skipForward}`;
     const label = isBack
-      ? `后退 ${this.settings.skipSeconds} 秒`
-      : `前进 ${this.settings.skipSeconds} 秒`;
+      ? t("skipBackBtn", { n: this.settings.skipSeconds })
+      : t("skipFwdBtn", { n: this.settings.skipSeconds });
     // v1.0.8: 只用 aria-label 避免双 tooltip
     btn.setAttribute("aria-label", label);
     btn.innerHTML = isBack ? SVG_REWIND_10 : SVG_FORWARD_10;
@@ -1076,7 +1077,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     btn.type = "button";
     btn.className = `${CLS.btn} ${CLS.holdSpeed}`;
     // v1.0.8: 只用 aria-label（避免原生+自定义双 tooltip）
-    btn.setAttribute("aria-label", "按住临时倍速（松开恢复）");
+    btn.setAttribute("aria-label", t("ariaTempSpeed"));
     btn.innerHTML = SVG_HOLD_SPEED;
 
     let holding = false;
@@ -1175,7 +1176,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `${CLS.btn} ${CLS.playPause}`;
-    btn.setAttribute("aria-label", "播放/暂停");
+    btn.setAttribute("aria-label", t("ariaPlayPause"));
 
     const renderIcon = () => {
       btn.innerHTML = mediaEl.paused ? SVG_PLAY : SVG_PAUSE;
@@ -1246,13 +1247,13 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     // v1.0.8: 菜单头部（"倍速"标题）
     const header = document.createElement("div");
     header.className = CLS.menuHeader;
-    header.textContent = "倍速";
+    header.textContent = t("menuTitle");
     menu.appendChild(header);
 
     if (speeds.length === 0) {
       const empty = document.createElement("div");
       empty.className = `${CLS.menuItem} mse-menu-item--empty`;
-      empty.textContent = "（未配置倍速）";
+      empty.textContent = t("menuEmpty");
       menu.appendChild(empty);
     } else {
       for (const speed of speeds) {
