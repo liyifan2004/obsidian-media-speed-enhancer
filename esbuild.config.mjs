@@ -1,6 +1,6 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
+import { builtinModules } from "node:module";
 
 /**
  * Obsidian 插件 esbuild 打包脚本
@@ -30,7 +30,7 @@ const external = [
 const config = {
   entryPoints: ["main.ts"],
   bundle: true,
-  external: external.concat(builtins),
+  external: external.concat(builtinModules, builtinModules.map((m) => `node:${m}`)),
   format: "cjs",
   target: "es2020",
   outfile: "main.js",

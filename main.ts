@@ -32,8 +32,6 @@ import {
 // 常量
 // ----------------------------------------------------------------------------
 
-/** v1.0.2: 让 audio/video 让出的左侧宽度（像素），用于 inline style 兜底 */
-const BUTTON_AREA_WIDTH = 168;
 /** v1.0.2: 轮询兜底时长（毫秒） */
 const POLLING_DURATION_MS = 30_000;
 /** v1.0.2: 轮询间隔（毫秒） */
@@ -63,23 +61,44 @@ const CLS = {
   menuItemActive: "is-active",
   menuCheck: "mse-menu-check",
   menuSpeed: "mse-menu-speed",
+  // v1.0.40: 祖先容器工具类（styles.css 定义，替代 inline style）
+  ancestorOverflowVisible: "mse-ancestor-overflow-visible",
+  ancestorRelative: "mse-ancestor-position-relative",
 } as const;
 
-// Material Design Icons
-const SVG_REWIND_10 = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>`;
-
-const SVG_FORWARD_10 = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="transform: scaleX(-1);"><path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>`;
-
-const SVG_HOLD_SPEED = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4 18l8.5-6L4 6v12zM13 6v12l8.5-6L13 6z"/></svg>`;
-
-const SVG_CHECK = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
-
-// v1.0.9: chevron-down 小图标，用于 anchor 按钮右侧提示"可下拉"
-const SVG_CHEVRON_DOWN = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>`;
+// Material Design Icons（只保存 path 数据，用 createSvg 构建 DOM，避免 innerHTML）
+const ICON_REWIND_10 =
+  "M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z";
+const ICON_HOLD_SPEED = "M4 18l8.5-6L4 6v12zM13 6v12l8.5-6L13 6z";
+const ICON_CHECK = "M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z";
 
 // v1.0.13: 播放/暂停图标（两态切换）
-const SVG_PLAY = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
-const SVG_PAUSE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+const ICON_PLAY = "M8 5v14l11-7z";
+const ICON_PAUSE = "M6 19h4V5H6v14zm8-14v14h4V5h-4z";
+
+/**
+ * 用 Obsidian 的 createSvg 构建图标 SVG 元素（替代 innerHTML 注入）。
+ * flipX: 水平镜像（"前进 10s" 复用"后退 10s"图形）。
+ */
+function buildIcon(
+  pathD: string,
+  opts?: { size?: number; flipX?: boolean }
+): SVGSVGElement {
+  const svg = createSvg("svg", {
+    attr: {
+      viewBox: "0 0 24 24",
+      width: String(opts?.size ?? 18),
+      height: String(opts?.size ?? 18),
+      fill: "currentColor",
+      "aria-hidden": "true",
+    },
+  });
+  if (opts?.flipX) {
+    svg.addClass("mse-icon-flip-x");
+  }
+  svg.createSvg("path", { attr: { d: pathD } });
+  return svg;
+}
 
 // ----------------------------------------------------------------------------
 // 类型
@@ -124,10 +143,10 @@ class ListenerBag {
   }> = [];
 
   /** 添加监听并自动配对移除函数 */
-  add(
+  add<E extends Event = Event>(
     target: EventTarget,
     type: string,
-    handler: (event: any) => void,
+    handler: (event: E) => void,
     capture?: boolean
   ): void {
     const listener = handler as EventListener;
@@ -229,8 +248,6 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
 
     // v1.0.2: 启动轮询兜底，捕获 MutationObserver 漏掉的动态媒体插入
     this.startPollingFallback();
-
-    console.log("[media-speed-enhancer] loaded");
   }
 
   onunload(): void {
@@ -267,7 +284,12 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     }
     this.allCleanups.clear();
 
-    console.log("[media-speed-enhancer] unloaded");
+    // v1.0.40: 清理祖先容器上的溢出/定位工具类（styles.css 定义，替代 inline style）
+    for (const el of fishAll(
+      `.${CLS.ancestorOverflowVisible}, .${CLS.ancestorRelative}`
+    )) {
+      el.removeClasses([CLS.ancestorOverflowVisible, CLS.ancestorRelative]);
+    }
   }
 
   async loadSettings(): Promise<void> {
@@ -318,7 +340,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
    */
   private registerCommands(): void {
     this.addCommand({
-      id: "media-speed-enhancer-skip-back",
+      id: "skip-back",
       name: t("cmdSkipBack"),
       callback: () => {
         const el = this.getLastActiveMedia();
@@ -327,7 +349,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "media-speed-enhancer-skip-forward",
+      id: "skip-forward",
       name: t("cmdSkipFwd"),
       callback: () => {
         const el = this.getLastActiveMedia();
@@ -336,7 +358,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "media-speed-enhancer-toggle-hold-speed",
+      id: "toggle-hold-speed",
       name: t("cmdTempSpeed"),
       callback: () => {
         const el = this.getLastActiveMedia();
@@ -345,7 +367,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "media-speed-enhancer-toggle-play-pause",
+      id: "toggle-play-pause",
       name: t("cmdPlayPause"),
       callback: () => {
         const el = this.getLastActiveMedia();
@@ -372,9 +394,8 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   private findMediaBySrc(oldEl: HTMLMediaElement): HTMLMediaElement | null {
     const src = oldEl.currentSrc || oldEl.src;
     if (!src) return null;
-    const all = document.querySelectorAll("audio, video");
-    for (const m of Array.from(all)) {
-      const cand = m as HTMLMediaElement;
+    const all = document.querySelectorAll<HTMLMediaElement>("audio, video");
+    for (const cand of Array.from(all)) {
       if (cand !== oldEl && cand.isConnected && cand.currentSrc === src) {
         return cand;
       }
@@ -440,8 +461,8 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
 
     // 在容器里找所有 media 元素，过滤掉 src 为空的（未加载）
     const medias = Array.from(
-      view.querySelectorAll("audio, video")
-    ) as HTMLMediaElement[];
+      view.querySelectorAll<HTMLMediaElement>("audio, video")
+    );
     if (medias.length < 2) return;
 
     // 按 DOM 顺序排序
@@ -507,7 +528,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
       osc.onended = () => {
         ctx.close().catch(() => undefined);
       };
-    } catch (e) {
+    } catch {
       // 提示音是增强体验，失败不影响主流程
     }
   }
@@ -531,16 +552,14 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     // (WeakMap 条目通过重新 set 覆盖)
 
     // 重新注入
-    const allMedia = document.querySelectorAll("audio, video");
-    allMedia.forEach((el) => {
-      if (el instanceof HTMLMediaElement) {
-        try {
-          this.tryInject(el);
-        } catch (e) {
-          console.warn("[media-speed-enhancer] inject error:", e);
-        }
+    const allMedia = document.querySelectorAll<HTMLMediaElement>("audio, video");
+    for (const el of Array.from(allMedia)) {
+      try {
+        this.tryInject(el);
+      } catch (e) {
+        console.warn("[media-speed-enhancer] inject error:", e);
       }
-    });
+    }
   }
 
   // ------------------------------------------------------------------
@@ -555,19 +574,10 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   private handleMutations(mutations: MutationRecord[]): void {
     for (const mutation of mutations) {
       for (const node of Array.from(mutation.addedNodes)) {
-        if (node.nodeType !== Node.ELEMENT_NODE) continue;
-        const el = node as HTMLElement;
+        if (!node.instanceOf(HTMLElement)) continue;
         try {
-          this.scanAndInject(el);
-          // 关键：递归扫描新节点内部所有 audio/video
-          const innerMedia = el.querySelectorAll("audio, video");
-          for (const m of Array.from(innerMedia)) {
-            try {
-              this.scanAndInject(m.parentElement || (m as HTMLElement));
-            } catch (e) {
-              console.warn("[media-speed-enhancer]", e);
-            }
-          }
+          // scanAndInject 会处理节点自身（如果是 media）及其内部所有嵌套 media
+          this.scanAndInject(node);
         } catch (e) {
           console.warn("[media-speed-enhancer] observer scan error:", e);
         }
@@ -580,10 +590,10 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
    * 用于轮询兜底和 refreshAllToolbars 重新注入路径。
    */
   private scanAllMedia(): void {
-    const allMedia = document.querySelectorAll("audio, video");
-    for (const m of Array.from(allMedia)) {
+    const allMedia = document.querySelectorAll<HTMLMediaElement>("audio, video");
+    for (const el of Array.from(allMedia)) {
       try {
-        this.tryInject(m as HTMLMediaElement);
+        this.tryInject(el);
       } catch (e) {
         console.warn("[media-speed-enhancer] scanAllMedia error:", e);
       }
@@ -616,17 +626,13 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   }
 
   private scanAndInject(root: Element | Document): void {
-    if (root instanceof HTMLMediaElement) {
+    if (root.instanceOf(HTMLMediaElement)) {
       this.tryInject(root);
     }
-    const queryFn = (root as Element).querySelectorAll?.bind(root);
-    if (typeof queryFn !== "function") return;
-    const mediaEls = queryFn("audio, video");
-    mediaEls.forEach((el) => {
-      if (el instanceof HTMLMediaElement) {
-        this.tryInject(el);
-      }
-    });
+    const mediaEls = root.querySelectorAll<HTMLMediaElement>("audio, video");
+    for (const el of Array.from(mediaEls)) {
+      this.tryInject(el);
+    }
   }
 
   private tryInject(mediaEl: HTMLMediaElement): void {
@@ -743,16 +749,17 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
       ".view-content",
     ];
     for (const sel of selectors) {
-      const found = mediaEl.closest(sel);
-      if (found instanceof HTMLElement) return found;
+      const found = mediaEl.closest<HTMLElement>(sel);
+      if (found) return found;
     }
     return mediaEl.parentElement;
   }
 
   /**
    * v1.0.1 hotfix: 强制祖先链上 Obsidian 媒体相关容器的 overflow: visible，
-   * 否则工具栏（top: -38px 悬浮在容器外）会被父级 overflow:hidden 裁剪。
+   * 否则工具栏会被父级 overflow:hidden 裁剪。
    * 同步强制 position: relative，确保 absolute 定位有参照。
+   * v1.0.40: 改用 CSS 工具类（styles.css）实现，不再写 inline style。
    */
   private ensureAncestorsVisible(mediaEl: HTMLElement): void {
     const targetClassSubstrings = [
@@ -769,12 +776,10 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     while (el && el !== document.body && depth < 12) {
       const cls = (el.className && typeof el.className === "string") ? el.className : "";
       if (cls && targetClassSubstrings.some((sub) => cls.includes(sub))) {
-        if (el.style.overflow !== "visible") {
-          el.style.overflow = "visible";
-        }
+        el.addClass(CLS.ancestorOverflowVisible);
         const computedPos = window.getComputedStyle(el).position;
         if (computedPos === "static") {
-          el.style.position = "relative";
+          el.addClass(CLS.ancestorRelative);
         }
       }
       el = el.parentElement;
@@ -787,11 +792,8 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     if (!container) return;
 
     container.classList.add(CLS.container);
-    const computedPos = window.getComputedStyle(container).position;
-    const forcedRelative = computedPos === "static";
-    if (forcedRelative) {
-      container.style.position = "relative";
-    }
+    // v1.0.40: position: relative 由 styles.css 的 .mse-container 提供，
+    // 不再按需写 inline style（静态样式统一走 CSS 类）。
 
     // v1.0.1 hotfix: 强制祖先链 overflow: visible，避免工具栏被裁剪
     this.ensureAncestorsVisible(mediaEl);
@@ -801,8 +803,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
 
     // v1.0.3: 创建 controls-wrap 容器把 anchor + toolbar 包在一起，
     // 这样 hover 任一都能触发展开动画
-    const controlsWrap = document.createElement("div");
-    controlsWrap.className = CLS.controlsWrap;
+    const controlsWrap = createDiv({ cls: CLS.controlsWrap });
 
     // 统一使用“工具栏自动隐藏”控制展开行为，避免与“始终展开”重复。
     if (!this.settings.toolbarAutoHide) {
@@ -914,9 +915,11 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     }
 
     // 自动隐藏关闭时常驻展开；开启时仅 hover 控件组展开。
+    const onWrapEnter = () => setExpanded(true);
+    const onWrapLeave = () => setExpanded(false);
     if (this.settings.toolbarAutoHide) {
-      controlsWrap.addEventListener("mouseenter", () => setExpanded(true));
-      controlsWrap.addEventListener("mouseleave", () => setExpanded(false));
+      controlsWrap.addEventListener("mouseenter", onWrapEnter);
+      controlsWrap.addEventListener("mouseleave", onWrapLeave);
     }
 
     const cleanupEntry: ToolbarCleanup = {
@@ -928,16 +931,13 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
         () => activeBag.clear(),
         () => {
           // v1.0.25: 清理 inline style 和事件监听
-          controlsWrap.removeEventListener("mouseenter", () => setExpanded(true));
-          controlsWrap.removeEventListener("mouseleave", () => setExpanded(false));
+          controlsWrap.removeEventListener("mouseenter", onWrapEnter);
+          controlsWrap.removeEventListener("mouseleave", onWrapLeave);
           controlsWrap.style.removeProperty("width");
           toolbar.style.removeProperty("width");
           mediaEl.style.removeProperty("margin-left");
           mediaEl.style.removeProperty("width");
           container.classList.remove(CLS.container);
-          if (forcedRelative) {
-            container.style.position = "";
-          }
         },
       ].flat(),
     };
@@ -952,11 +952,8 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     toolbar: HTMLElement;
     leftCluster: HTMLElement;
   } {
-    const toolbar = document.createElement("div");
-    toolbar.className = CLS.toolbar;
-
-    const leftCluster = document.createElement("div");
-    leftCluster.className = CLS.clusterLeft;
+    const toolbar = createDiv({ cls: CLS.toolbar });
+    const leftCluster = createDiv({ cls: CLS.clusterLeft });
 
     return { toolbar, leftCluster };
   }
@@ -966,17 +963,14 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   // ------------------------------------------------------------------
 
   private createAnchorButton(mediaEl: HTMLMediaElement): ButtonResult {
-    const btn = document.createElement("button");
+    const btn = createEl("button", { cls: `${CLS.btn} ${CLS.anchor}` });
     btn.type = "button";
-    btn.className = `${CLS.btn} ${CLS.anchor}`;
     btn.setAttribute("aria-label", t("ariaAnchor"));
     btn.setAttribute("aria-haspopup", "menu");
 
     // v1.0.9: 合并 speed 文本 + 下拉图标到一个圆角矩形按钮
-    const speedSpan = document.createElement("span");
-    speedSpan.className = CLS.anchorSpeed;
-    speedSpan.textContent = `${formatRate(mediaEl.playbackRate)}×`;
-    btn.appendChild(speedSpan);
+    const speedSpan = btn.createSpan({ cls: CLS.anchorSpeed });
+    speedSpan.setText(`${formatRate(mediaEl.playbackRate)}×`);
 
     // v1.0.17: 移除 chevron 下拉图标（让 anchor 真正变成宽矩形）
     const renderSpeed = () => {
@@ -1015,13 +1009,13 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
    */
   private applyGlobalRate(rate: number, excludeEl: HTMLMediaElement): void {
     window.setTimeout(() => {
-      const all = document.querySelectorAll("audio, video");
+      const all = document.querySelectorAll<HTMLMediaElement>("audio, video");
       for (const el of Array.from(all)) {
         if (el === excludeEl) continue;
-        if ((el as HTMLMediaElement).playbackRate === rate) continue;
+        if (el.playbackRate === rate) continue;
         try {
-          (el as HTMLMediaElement).playbackRate = rate;
-        } catch (e) {
+          el.playbackRate = rate;
+        } catch {
           /* ignore */
         }
       }
@@ -1033,15 +1027,17 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     direction: "back" | "forward"
   ): ButtonResult {
     const isBack = direction === "back";
-    const btn = document.createElement("button");
+    const btn = createEl("button", {
+      cls: `${CLS.btn} ${isBack ? CLS.skipBack : CLS.skipForward}`,
+    });
     btn.type = "button";
-    btn.className = `${CLS.btn} ${isBack ? CLS.skipBack : CLS.skipForward}`;
     const label = isBack
       ? t("skipBackBtn", { n: this.settings.skipSeconds })
       : t("skipFwdBtn", { n: this.settings.skipSeconds });
     // v1.0.8: 只用 aria-label 避免双 tooltip
     btn.setAttribute("aria-label", label);
-    btn.innerHTML = isBack ? SVG_REWIND_10 : SVG_FORWARD_10;
+    // "前进 10s" = "后退 10s" 图形水平镜像
+    btn.appendChild(buildIcon(ICON_REWIND_10, { flipX: !isBack }));
 
     const bag = new ListenerBag();
     const skip = this.settings.skipSeconds;
@@ -1073,12 +1069,11 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
    * - cleanup 一次性移除全部
    */
   private createHoldSpeedButton(mediaEl: HTMLMediaElement): ButtonResult {
-    const btn = document.createElement("button");
+    const btn = createEl("button", { cls: `${CLS.btn} ${CLS.holdSpeed}` });
     btn.type = "button";
-    btn.className = `${CLS.btn} ${CLS.holdSpeed}`;
     // v1.0.8: 只用 aria-label（避免原生+自定义双 tooltip）
     btn.setAttribute("aria-label", t("ariaTempSpeed"));
-    btn.innerHTML = SVG_HOLD_SPEED;
+    btn.appendChild(buildIcon(ICON_HOLD_SPEED));
 
     let holding = false;
     let originalRate = 1.0;
@@ -1173,13 +1168,13 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
    * 切换 media 播放/暂停状态，图标随状态变化
    */
   private createPlayPauseButton(mediaEl: HTMLMediaElement): ButtonResult {
-    const btn = document.createElement("button");
+    const btn = createEl("button", { cls: `${CLS.btn} ${CLS.playPause}` });
     btn.type = "button";
-    btn.className = `${CLS.btn} ${CLS.playPause}`;
     btn.setAttribute("aria-label", t("ariaPlayPause"));
 
     const renderIcon = () => {
-      btn.innerHTML = mediaEl.paused ? SVG_PLAY : SVG_PAUSE;
+      btn.empty();
+      btn.appendChild(buildIcon(mediaEl.paused ? ICON_PLAY : ICON_PAUSE));
     };
     renderIcon();
 
@@ -1229,8 +1224,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     // P1-2: cleanups 数组先声明，供后续各阶段统一收集监听器移除函数
     const cleanups: Array<() => void> = [];
 
-    const menu = document.createElement("div");
-    menu.className = CLS.menu;
+    const menu = createDiv({ cls: CLS.menu });
     menu.setAttribute("role", "menu");
     menu.id = `mse-menu-${Date.now().toString(36)}-${Math.random()
       .toString(36)
@@ -1245,44 +1239,33 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     const menuItems: HTMLButtonElement[] = [];
 
     // v1.0.8: 菜单头部（"倍速"标题）
-    const header = document.createElement("div");
-    header.className = CLS.menuHeader;
-    header.textContent = t("menuTitle");
-    menu.appendChild(header);
+    menu.createDiv({ cls: CLS.menuHeader, text: t("menuTitle") });
 
     if (speeds.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = `${CLS.menuItem} mse-menu-item--empty`;
-      empty.textContent = t("menuEmpty");
-      menu.appendChild(empty);
+      menu.createDiv({
+        cls: `${CLS.menuItem} mse-menu-item--empty`,
+        text: t("menuEmpty"),
+      });
     } else {
       for (const speed of speeds) {
-        const item = document.createElement("button");
+        const item = createEl("button", { cls: CLS.menuItem });
         item.type = "button";
-        item.className = CLS.menuItem;
         item.setAttribute("role", "menuitem");
         item.tabIndex = -1; // 让 menu 容器成为 tab 焦点，方向键管理
 
         const isCurrent = Math.abs(currentRate - speed) < 0.005;
         if (isCurrent) item.classList.add(CLS.menuItemActive);
 
-        const checkSpan = document.createElement("span");
-        checkSpan.className = CLS.menuCheck;
+        const checkSpan = item.createSpan({ cls: CLS.menuCheck });
         if (isCurrent) {
-          checkSpan.innerHTML = SVG_CHECK;
+          checkSpan.appendChild(buildIcon(ICON_CHECK, { size: 14 }));
         } else {
-          const ph = document.createElement("span");
-          ph.style.display = "inline-block";
-          ph.style.width = "14px";
-          ph.style.height = "14px";
-          checkSpan.appendChild(ph);
+          // 占位保持行对齐（样式在 styles.css 的 .mse-menu-check-ph）
+          checkSpan.createSpan({ cls: "mse-menu-check-ph" });
         }
-        item.appendChild(checkSpan);
 
-        const label = document.createElement("span");
-        label.className = CLS.menuSpeed;
-        label.textContent = `${formatRate(speed)}×`;
-        item.appendChild(label);
+        const label = item.createSpan({ cls: CLS.menuSpeed });
+        label.setText(`${formatRate(speed)}×`);
 
         const onClick = (e: MouseEvent) => {
           e.preventDefault();

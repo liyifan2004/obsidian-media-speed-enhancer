@@ -1,0 +1,48 @@
+name: Release Obsidian plugin
+
+# 推送任意 tag 时自动构建、生成构建来源证明（artifact attestation）、
+# 并创建 GitHub Release（只附带 main.js / manifest.json / styles.css，
+# 不要上传 zip 等额外文件——Obsidian 只下载这三个文件）。
+on:
+  push:
+    tags: ["*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # 构建来源证明：让用户可以用 `gh attestation verify main.js` 校验
+      # release 资产确实由本仓库源码构建（社区商店自动检查项）。
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            styles.css
+            manifest.json
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          gh release create "$tag" \
+            --title "$tag" \
+            --generate-notes \
+            main.js manifest.json styles.css

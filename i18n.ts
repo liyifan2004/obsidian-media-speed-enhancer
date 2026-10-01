@@ -129,7 +129,7 @@ const localeMap: Record<string, Partial<typeof en>> = {
 export function t(key: keyof typeof en, vars?: Record<string, string | number>): string {
 	const loc = moment.locale();
 	const dict = localeMap[loc] ?? localeMap[loc.split("-")[0]] ?? en;
-	let s: string = (dict[key] as string | undefined) ?? en[key];
+	let s: string = dict[key] ?? en[key];
 	if (vars) {
 		for (const [k, v] of Object.entries(vars)) {
 			s = s.split("{" + k + "}").join(String(v));

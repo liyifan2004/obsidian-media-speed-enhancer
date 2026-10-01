@@ -1,7 +1,7 @@
 {
   "id": "media-speed-enhancer",
   "name": "Media Speed Enhancer",
-  "version": "1.0.39",
+  "version": "1.0.40",
   "minAppVersion": "1.5.0",
   "description": "Add 10s skip, hold-to-speed, and a custom speed menu to the native HTML5 audio and video players.",
   "author": "Li Yifan",

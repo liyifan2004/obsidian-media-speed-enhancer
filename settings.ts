@@ -170,7 +170,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Media Speed Enhancer" });
+    new Setting(containerEl).setName("Media Speed Enhancer").setHeading();
 
     this.renderButtonsSection(containerEl);
     this.renderSpeedSection(containerEl);
@@ -193,13 +193,19 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   // 1) 按钮
   // ===========================================================================
   private renderButtonsSection(root: HTMLElement): void {
-    root.createEl("h3", { text: t("headingButtons"), cls: "mse-settings-heading" });
+    new Setting(root)
+      .setName(t("headingButtons"))
+      .setHeading()
+      .setClass("mse-settings-heading");
 
     // 容器化列表：刷新列表（拖拽排序 / 还原默认）只清空容器，不影响 slider。
     this.buttonListContainer = root.createDiv({ cls: "mse-button-list-wrap" });
     this.renderButtonList(this.buttonListContainer);
 
-    root.createEl("h4", { text: t("headingButtonAppearance"), cls: "mse-settings-subheading" });
+    new Setting(root)
+      .setName(t("headingButtonAppearance"))
+      .setHeading()
+      .setClass("mse-settings-subheading");
 
     this.renderOpacitySlider(
       root,
@@ -270,13 +276,8 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       this.applyButtonRowState(row, toggle.checked);
 
       toggle.addEventListener("click", (e) => e.stopPropagation());
-      toggle.addEventListener("change", async () => {
-        this.plugin.settings.enabledButtons[id] = toggle.checked;
-        await this.plugin.saveSettings();
-        await this.plugin.refreshAllToolbars();
-        this.applyButtonRowState(row, toggle.checked);
-        // 联动：相关设置项的可用状态
-        this.refreshDependentSettingStates();
+      toggle.addEventListener("change", () => {
+        void this.onButtonToggleChanged(id, toggle, row);
       });
 
       row.addEventListener("dragstart", (e) => {
@@ -300,7 +301,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
         row.classList.add("mse-drag-over");
       });
       row.addEventListener("dragleave", () => row.classList.remove("mse-drag-over"));
-      row.addEventListener("drop", async (e) => {
+      row.addEventListener("drop", (e) => {
         e.preventDefault();
         row.classList.remove("mse-drag-over");
         const fallback = e.dataTransfer?.getData("text/plain") as ButtonId | "";
@@ -313,12 +314,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
         newOrder.splice(srcIdx, 1);
         newOrder.splice(dstIdx, 0, src);
         this.plugin.settings.buttonOrder = newOrder;
-        await this.plugin.saveSettings();
-        await this.plugin.refreshAllToolbars();
-        for (const bid of newOrder) {
-          const r = orderRows.get(bid);
-          if (r) list.appendChild(r);
-        }
+        void this.persistButtonOrder(newOrder, list, orderRows);
       });
 
       orderRows.set(id, row);
@@ -332,7 +328,6 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       .addButton((btn) =>
         btn
           .setButtonText(t("reset"))
-          .setWarning()
           .onClick(async () => {
             this.plugin.settings.buttonOrder = BUTTON_META.map((b) => b.id);
             this.plugin.settings.enabledButtons = Object.fromEntries(
@@ -347,16 +342,41 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
             this.refreshDependentSettingStates();
           })
       );
-    // 隐藏 footer 的左侧文字，让"重置"按钮单独呈现
-    const infoEl = footer.settingEl.querySelector(
-      ".setting-item-info"
-    ) as HTMLElement | null;
-    if (infoEl) infoEl.style.display = "none";
+    // 隐藏 footer 的左侧文字由 CSS 完成（.mse-footer-row .setting-item-info），
+    // 让"重置"按钮单独呈现
     footer.settingEl.classList.add("mse-footer-row");
   }
 
   private applyButtonRowState(row: HTMLElement, enabled: boolean): void {
     row.classList.toggle("mse-button-order-row--disabled", !enabled);
+  }
+
+  /** 勾选/取消功能按钮：保存设置、重建工具栏，并刷新行状态与联动设置项。 */
+  private async onButtonToggleChanged(
+    id: ButtonId,
+    toggle: HTMLInputElement,
+    row: HTMLElement
+  ): Promise<void> {
+    this.plugin.settings.enabledButtons[id] = toggle.checked;
+    await this.plugin.saveSettings();
+    await this.plugin.refreshAllToolbars();
+    this.applyButtonRowState(row, toggle.checked);
+    // 联动：相关设置项的可用状态
+    this.refreshDependentSettingStates();
+  }
+
+  /** 拖拽排序落定：保存新顺序、重建工具栏并按新顺序重排 DOM 行。 */
+  private async persistButtonOrder(
+    newOrder: ButtonId[],
+    list: HTMLElement,
+    orderRows: Map<ButtonId, HTMLElement>
+  ): Promise<void> {
+    await this.plugin.saveSettings();
+    await this.plugin.refreshAllToolbars();
+    for (const bid of newOrder) {
+      const r = orderRows.get(bid);
+      if (r) list.appendChild(r);
+    }
   }
 
   /**
@@ -385,7 +405,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   // 2) 倍速
   // ===========================================================================
   private renderSpeedSection(root: HTMLElement): void {
-    root.createEl("h3", { text: t("headingSpeed"), cls: "mse-settings-heading" });
+    new Setting(root)
+      .setName(t("headingSpeed"))
+      .setHeading()
+      .setClass("mse-settings-heading");
 
     const speedSetting = new Setting(root)
       .setName(t("labelTempSpeed"))
@@ -414,9 +437,9 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
           this.plugin.settings.tempSpeed = DEFAULT_SETTINGS.tempSpeed;
           await this.plugin.saveSettings();
           // 直接更新输入框值，避免 this.display() 触发滚动复位
-          const input = speedSetting.controlEl.querySelector(
+          const input = speedSetting.controlEl.querySelector<HTMLInputElement>(
             "input[type='number']"
-          ) as HTMLInputElement | null;
+          );
           if (input) input.value = String(DEFAULT_SETTINGS.tempSpeed);
         })
     );
@@ -460,9 +483,9 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
         .onClick(async () => {
           this.plugin.settings.customSpeeds = [...DEFAULT_CUSTOM_SPEEDS];
           await this.plugin.saveSettings();
-          const ta = speedsSetting.controlEl.querySelector(
+          const ta = speedsSetting.controlEl.querySelector<HTMLTextAreaElement>(
             "textarea"
-          ) as HTMLTextAreaElement | null;
+          );
           if (ta) ta.value = formatCustomSpeeds(DEFAULT_CUSTOM_SPEEDS);
           this.customSpeedsDraft = formatCustomSpeeds(DEFAULT_CUSTOM_SPEEDS);
         })
@@ -486,7 +509,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   // 3) 跳转
   // ===========================================================================
   private renderSkipSection(root: HTMLElement): void {
-    root.createEl("h3", { text: t("headingSkip"), cls: "mse-settings-heading" });
+    new Setting(root)
+      .setName(t("headingSkip"))
+      .setHeading()
+      .setClass("mse-settings-heading");
 
     const skipSetting = new Setting(root)
       .setName(t("labelSkipSeconds"))
@@ -522,9 +548,9 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
           this.plugin.settings.skipSeconds = DEFAULT_SETTINGS.skipSeconds;
           await this.plugin.saveSettings();
           await this.plugin.refreshAllToolbars();
-          const input = skipSetting.controlEl.querySelector(
+          const input = skipSetting.controlEl.querySelector<HTMLInputElement>(
             "input[type='number']"
-          ) as HTMLInputElement | null;
+          );
           if (input) input.value = String(DEFAULT_SETTINGS.skipSeconds);
         })
     );
@@ -541,7 +567,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   private seqToneSetting: Setting | null = null;
 
   private renderToolbarSection(root: HTMLElement): void {
-    root.createEl("h3", { text: t("headingToolbar"), cls: "mse-settings-heading" });
+    new Setting(root)
+      .setName(t("headingToolbar"))
+      .setHeading()
+      .setClass("mse-settings-heading");
 
     new Setting(root)
       .setName(t("labelAutoHide"))
@@ -599,9 +628,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
         .onClick(async () => {
           this.plugin.settings.minDurationSeconds = DEFAULT_SETTINGS.minDurationSeconds;
           await this.plugin.saveSettings();
-          const input = minDurationSetting.controlEl.querySelector(
-            "input[type='number']"
-          ) as HTMLInputElement | null;
+          const input =
+            minDurationSetting.controlEl.querySelector<HTMLInputElement>(
+              "input[type='number']"
+            );
           if (input) input.value = String(DEFAULT_SETTINGS.minDurationSeconds);
         })
     );
@@ -643,9 +673,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
           this.plugin.settings.sequentialPlayTone =
             DEFAULT_SETTINGS.sequentialPlayTone;
           await this.plugin.saveSettings();
-          const input = seqToneSetting.controlEl.querySelector(
-            "input[type='checkbox']"
-          ) as HTMLInputElement | null;
+          const input =
+            seqToneSetting.controlEl.querySelector<HTMLInputElement>(
+              "input[type='checkbox']"
+            );
           if (input) input.checked = DEFAULT_SETTINGS.sequentialPlayTone;
         })
     );
@@ -659,7 +690,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   // 5) 兼容性
   // ===========================================================================
   private renderCompatSection(root: HTMLElement): void {
-    root.createEl("h3", { text: t("headingCompat"), cls: "mse-settings-heading" });
+    new Setting(root)
+      .setName(t("headingCompat"))
+      .setHeading()
+      .setClass("mse-settings-heading");
 
     new Setting(root)
       .setName(t("labelTouch"))
@@ -695,7 +729,6 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       slider = s;
       s.setLimits(0, 100, 1)
         .setValue(initial)
-        .setDynamicTooltip()
         .onChange(async (value) => {
           onChange(value);
           await this.plugin.saveSettings();
@@ -707,14 +740,12 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
         .setTooltip(t("resetTooltip"))
         .onClick(async () => {
           const def = DEFAULT_SETTINGS[settingKey];
-          (this.plugin.settings as any)[settingKey] = def;
+          this.plugin.settings[settingKey] = def;
           await this.plugin.saveSettings();
           onChange(def);
-          if (slider) (slider as SliderComponent).setValue(def);
+          if (slider) slider.setValue(def);
         })
     );
-    if (slider !== null) {
-      (slider as SliderComponent).setValue(initial);
-    }
+    // 初始值已由 addSlider 回调内的 setValue(initial) 设置
   }
 }

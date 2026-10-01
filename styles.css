@@ -313,8 +313,13 @@
 .mse-settings-section:first-of-type {
   margin-top: 12px;
 }
+/* v1.0.40: 标题改用 Setting().setHeading() 渲染，类挂在 setting-item 上，
+   字号作用到 .setting-item-name（兼容其内部是否再嵌 h3）。 */
 .mse-settings-heading {
   margin: 0 0 6px 0;
+}
+.mse-settings-heading .setting-item-name,
+.mse-settings-heading .setting-item-name h3 {
   font-size: 18px;
   font-weight: 600;
   color: var(--text-normal);
@@ -322,6 +327,9 @@
 }
 .mse-settings-subheading {
   margin: 16px 0 4px 0;
+}
+.mse-settings-subheading .setting-item-name,
+.mse-settings-subheading .setting-item-name h3 {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-normal);
@@ -492,4 +500,33 @@
     width: 100%;
     max-width: 280px;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   v1.0.40: lint 合规 — 静态样式统一由 CSS 类提供（不再写 inline style）
+   --------------------------------------------------------------------------- */
+
+/* 祖先容器工具类：防止工具栏被 overflow:hidden 裁剪 / absolute 定位参照 */
+.mse-ancestor-overflow-visible {
+  overflow: visible !important;
+}
+.mse-ancestor-position-relative {
+  position: relative !important;
+}
+
+/* "前进 10s" 图标 = "后退 10s" 图形水平镜像 */
+.mse-icon-flip-x {
+  transform: scaleX(-1);
+}
+
+/* 倍速菜单未选中项的勾选占位（保持行对齐） */
+.mse-menu-check-ph {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+}
+
+/* 按钮列表底部行：隐藏左侧文字，只留"重置"按钮 */
+.mse-footer-row .setting-item-info {
+  display: none;
 }
