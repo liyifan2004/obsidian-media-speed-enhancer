@@ -1,0 +1,42 @@
+# CI for Media Speed Enhancer.
+#
+# The plugin has no automated test suite yet (the codebase is almost
+# entirely DOM manipulation against real media elements, so the testable
+# surface is thin). This workflow still guards the parts that can be
+# checked mechanically: the TypeScript type check and the production
+# bundle.
+#
+# When a test suite is added, add a "Tests" step here and wire it into
+# release.yml as well — a test that is not wired into CI is not a gate.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
