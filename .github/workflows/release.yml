@@ -52,7 +52,7 @@ jobs:
       # 构建来源证明：让用户可以用 `gh attestation verify main.js` 校验
       # release 资产确实由本仓库源码构建（社区商店自动检查项）。
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             main.js
