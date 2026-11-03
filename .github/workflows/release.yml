@@ -1,11 +1,16 @@
 name: Release Obsidian plugin
 
-# 推送任意 tag 时自动构建、生成构建来源证明（artifact attestation）、
-# 并创建 GitHub Release（只附带 main.js / manifest.json / styles.css，
-# 不要上传 zip 等额外文件——Obsidian 只下载这三个文件）。
+# 推送形如 1.0.41 的版本 tag 时自动构建、生成构建来源证明
+# （artifact attestation）、并创建 GitHub Release（只附带
+# main.js / manifest.json / styles.css，不要上传 zip 等额外文件——
+# Obsidian 只下载这三个文件）。
+#
+# tag 只接受纯 semver：Obsidian 商店按 tag 名识别版本，`v1.0.41` 这类
+# 带前缀的 tag 会被商店当成非法版本号。
 on:
   push:
-    tags: ["*"]
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
   build:
@@ -32,6 +37,17 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # tag 与 manifest 版本号必须一致，否则商店里的版本号会和实际代码
+      # 对不上（用户升级不到真正的修复版本）。这是本仓库唯一防止
+      # 「打错 tag 就发版」的闸门。
+      - name: Verify tag matches manifest version
+        run: |
+          manifest_version="$(node -p "require('./manifest.json').version")"
+          if [ "$manifest_version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match manifest version $manifest_version"
+            exit 1
+          fi
 
       # 构建来源证明：让用户可以用 `gh attestation verify main.js` 校验
       # release 资产确实由本仓库源码构建（社区商店自动检查项）。
