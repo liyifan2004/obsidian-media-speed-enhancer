@@ -1,6 +1,15 @@
 import { App, PluginSettingTab, Setting, SliderComponent } from "obsidian";
 import { t } from "./i18n";
 import type MediaSpeedEnhancerPlugin from "./main";
+import {
+  DEFAULT_CUSTOM_SPEEDS,
+  SKIP_MAX,
+  SKIP_MIN,
+  SPEED_MAX,
+  SPEED_MIN,
+  formatCustomSpeeds,
+  parseCustomSpeeds,
+} from "./src/speed";
 
 /**
  * 插件设置接口。
@@ -82,12 +91,6 @@ export interface MediaSpeedEnhancerSettings {
   buttonHoverOpacity: number;
 }
 
-const DEFAULT_CUSTOM_SPEEDS: number[] = [
-  0.5, 0.75,
-  1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0,
-  2.5, 3.0,
-];
-
 export const DEFAULT_SETTINGS: MediaSpeedEnhancerSettings = {
   tempSpeed: 2.0,
   customSpeeds: [...DEFAULT_CUSTOM_SPEEDS],
@@ -107,40 +110,7 @@ export const DEFAULT_SETTINGS: MediaSpeedEnhancerSettings = {
   buttonHoverOpacity: 16,
 };
 
-const SPEED_MIN = 0.25;
-const SPEED_MAX = 4.0;
-const SKIP_MIN = 1;
-const SKIP_MAX = 60;
-
-/**
- * 解析用户输入的 customSpeeds 文本。
- * - 每行一个数字
- * - 自动去重 + 过滤非法值（NaN、越界）
- * - 升序排序
- * - 若解析结果为空，回退到 DEFAULT_SETTINGS.customSpeeds
- */
-export function parseCustomSpeeds(input: string): number[] {
-  const parsed: number[] = [];
-  for (const lineRaw of input.split(/\r?\n/)) {
-    const line = lineRaw.trim();
-    if (!line) continue;
-    const v = Number(line);
-    if (!Number.isFinite(v) || v < SPEED_MIN || v > SPEED_MAX) continue;
-    parsed.push(v);
-  }
-  const unique = Array.from(
-    new Set(parsed.map((x) => Number(x.toFixed(3))))
-  );
-  unique.sort((a, b) => a - b);
-  if (unique.length === 0) {
-    return [...DEFAULT_CUSTOM_SPEEDS];
-  }
-  return unique;
-}
-
-export function formatCustomSpeeds(speeds: number[]): string {
-  return speeds.map((s) => s.toString()).join("\n");
-}
+// parseCustomSpeeds / formatCustomSpeeds 已移到 src/speed.ts（纯逻辑，便于单测）。
 
 /**
  * 设置页面：自上而下连贯阅读。

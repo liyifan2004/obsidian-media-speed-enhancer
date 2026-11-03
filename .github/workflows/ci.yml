@@ -1,13 +1,17 @@
 # CI for Media Speed Enhancer.
 #
-# The plugin has no automated test suite yet (the codebase is almost
-# entirely DOM manipulation against real media elements, so the testable
-# surface is thin). This workflow still guards the parts that can be
-# checked mechanically: the TypeScript type check and the production
-# bundle.
+# Runs the same gate the project uses locally (`npm run verify`):
+#   typecheck (tsc) → vitest → esbuild build
 #
-# When a test suite is added, add a "Tests" step here and wire it into
-# release.yml as well — a test that is not wired into CI is not a gate.
+# The plugin used to have no test suite at all (the codebase was almost
+# entirely DOM manipulation against real media elements, so the testable
+# surface was thin). The speed rules have since been extracted into
+# src/speed.ts — a pure module with no obsidian/DOM dependency — and are
+# covered by test/speed.test.ts.
+#
+# Every push and pull request runs this. It is deliberately separate from the
+# release workflow: CI proves the tree is green, the release workflow proves
+# the published artifacts were built from this exact tree.
 
 name: CI
 
@@ -37,6 +41,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Tests
+        run: npm run test
 
       - name: Build
         run: npm run build

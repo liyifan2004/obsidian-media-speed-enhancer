@@ -115,9 +115,16 @@ Skipped targets: media inside iframes (YouTube and other third-party embeds) and
 npm install
 npm run build      # bundle to main.js (production)
 npm run dev        # watch mode, auto rebuild
+npm run test       # unit tests (vitest)
+npm run verify     # typecheck + tests + build
 ```
 
 Build artifacts: `main.js` (bundled entry), `styles.css` (loaded automatically), `manifest.json` (metadata).
+
+The speed rules (range validation, dedup, sorting, display formatting) live in
+`src/speed.ts` — a pure module with no Obsidian or DOM dependency — and are
+covered by `test/speed.test.ts`. Keep it that way: logic that can be tested
+without a browser should not be buried in DOM code.
 
 ## License
 
@@ -232,9 +239,15 @@ Build artifacts: `main.js` (bundled entry), `styles.css` (loaded automatically),
 npm install
 npm run build      # 打包到 main.js（production）
 npm run dev        # watch 模式，自动重建
+npm run test       # 单元测试（vitest）
+npm run verify     # 类型检查 + 测试 + 构建
 ```
 
 构建产物：`main.js`（打包入口）、`styles.css`（自动加载）、`manifest.json`（元数据）。
+
+倍速相关的规则（取值范围校验、去重、排序、显示格式化）集中在 `src/speed.ts`
+——一个不依赖 Obsidian、不碰 DOM 的纯模块——由 `test/speed.test.ts` 覆盖。
+请保持这个边界：不需要浏览器就能测的逻辑，不要埋在 DOM 代码里。
 
 ## License
 

@@ -6,7 +6,10 @@
   "scripts": {
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs",
-    "typecheck": "tsc -noEmit -skipLibCheck"
+    "typecheck": "tsc -noEmit -skipLibCheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "npm run typecheck && npm run test && npm run build"
   },
   "keywords": [
     "obsidian",
@@ -19,10 +22,11 @@
   "author": "李轶凡",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "esbuild": "^0.20.0",
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
     "obsidian": "^1.5.7",
     "tslib": "^2.6.2",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^5.1.0"
   }
 }

@@ -4,8 +4,13 @@ import { t } from "./i18n"; // P2-1: 类型单独 import，避免运行时循环
 import {
   DEFAULT_SETTINGS,
   MediaSpeedEnhancerSettingTab,
-  parseCustomSpeeds,
 } from "./settings";
+import {
+  formatRate,
+  isCurrentRate,
+  normalizeButtonOrder,
+  parseCustomSpeeds,
+} from "./src/speed";
 
 // ============================================================================
 // 关键设计决策 / Critical Design Decisions
@@ -310,19 +315,11 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   }
 
   private normalizeButtonOrder(order: unknown): ButtonId[] {
-    const valid = new Set<ButtonId>([
-      "skipBack",
-      "skipForward",
-      "holdSpeed",
-      "playPause",
-    ]);
-    const normalized = Array.isArray(order)
-      ? order.filter((id): id is ButtonId => valid.has(id as ButtonId))
-      : [];
-    for (const id of DEFAULT_SETTINGS.buttonOrder) {
-      if (!normalized.includes(id)) normalized.push(id);
-    }
-    return normalized;
+    return normalizeButtonOrder<ButtonId>(
+      order,
+      ["skipBack", "skipForward", "holdSpeed", "playPause"],
+      DEFAULT_SETTINGS.buttonOrder
+    );
   }
 
   async saveSettings(): Promise<void> {
@@ -1253,7 +1250,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
         item.setAttribute("role", "menuitem");
         item.tabIndex = -1; // 让 menu 容器成为 tab 焦点，方向键管理
 
-        const isCurrent = Math.abs(currentRate - speed) < 0.005;
+        const isCurrent = isCurrentRate(currentRate, speed);
         if (isCurrent) item.classList.add(CLS.menuItemActive);
 
         const checkSpan = item.createSpan({ cls: CLS.menuCheck });
@@ -1481,17 +1478,4 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
 // 工具函数
 // ----------------------------------------------------------------------------
 
-/**
- * v1.0.2: 倍速格式化 — 保留至少 1 位小数，让 1.0 显示为 "1.0"（与 "×" 组合为 "1.0×"）。
- * 例如：1.0 → "1.0"，1.25 → "1.25"，0.5 → "0.5"，3 → "3.0"
- */
-function formatRate(rate: number): string {
-  if (!Number.isFinite(rate)) return "1.0";
-  const rounded = Math.round(rate * 1000) / 1000;
-  // 用 toFixed(2) 保留两位，然后去掉末尾的 0 但至少保留 1 位小数
-  const s = rounded.toFixed(2);
-  if (s.endsWith("0")) {
-    return s.slice(0, -1); // "1.00" → "1.0", "0.50" → "0.5"
-  }
-  return s;
-}
+// formatRate 已移到 src/speed.ts（纯逻辑，便于单测）。
