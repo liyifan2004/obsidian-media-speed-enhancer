@@ -3,11 +3,16 @@ import { t } from "./i18n";
 import type MediaSpeedEnhancerPlugin from "./main";
 import {
   DEFAULT_CUSTOM_SPEEDS,
+  MIN_DURATION_MAX,
+  MIN_DURATION_MIN,
   SKIP_MAX,
   SKIP_MIN,
   SPEED_MAX,
   SPEED_MIN,
   formatCustomSpeeds,
+  normalizeMinDurationSeconds,
+  normalizeSkipSeconds,
+  normalizeTempSpeed,
   parseCustomSpeeds,
 } from "./src/speed";
 
@@ -387,8 +392,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     speedSetting.addText((text) => {
       text.setValue(String(this.plugin.settings.tempSpeed))
         .onChange(async (value) => {
-          const num = Number(value);
-          if (Number.isFinite(num) && num >= SPEED_MIN && num <= SPEED_MAX) {
+          // 归一化走 src/speed.ts 的纯函数（被单测覆盖），
+          // 不在这里另写一份内联校验 —— 两套逻辑必然漂移。
+          const num = normalizeTempSpeed(value, DEFAULT_SETTINGS.tempSpeed);
+          if (num !== this.plugin.settings.tempSpeed) {
             this.plugin.settings.tempSpeed = num;
             await this.plugin.saveSettings();
           }
@@ -491,13 +498,9 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     skipSetting.addText((text) => {
       text.setValue(String(this.plugin.settings.skipSeconds))
         .onChange(async (value) => {
-          const num = Number(value);
-          if (
-            Number.isFinite(num) &&
-            num >= SKIP_MIN &&
-            num <= SKIP_MAX &&
-            Number.isInteger(num)
-          ) {
+          // 同上：归一化走被单测覆盖的纯函数。
+          const num = normalizeSkipSeconds(value, DEFAULT_SETTINGS.skipSeconds);
+          if (num !== this.plugin.settings.skipSeconds) {
             this.plugin.settings.skipSeconds = num;
             await this.plugin.saveSettings();
             // v1.0.35: 立即重建所有工具栏，按钮 label 会用新 skipSeconds
@@ -579,15 +582,19 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     minDurationSetting.addText((text) => {
       text.setValue(String(this.plugin.settings.minDurationSeconds))
         .onChange(async (value) => {
-          const num = Number(value);
-          if (Number.isFinite(num) && num >= 1 && num <= 3600) {
+          // 同上：归一化走被单测覆盖的纯函数。
+          const num = normalizeMinDurationSeconds(
+            value,
+            DEFAULT_SETTINGS.minDurationSeconds
+          );
+          if (num !== this.plugin.settings.minDurationSeconds) {
             this.plugin.settings.minDurationSeconds = num;
             await this.plugin.saveSettings();
           }
         });
       text.inputEl.type = "number";
-      text.inputEl.min = "1";
-      text.inputEl.max = "3600";
+      text.inputEl.min = String(MIN_DURATION_MIN);
+      text.inputEl.max = String(MIN_DURATION_MAX);
       text.inputEl.step = "1";
     });
 

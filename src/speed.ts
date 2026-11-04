@@ -153,15 +153,70 @@ export function normalizeButtonOrder<T extends string>(
 }
 
 /**
+ * 把「用户输入」转成数值，区分「没有值」与「值是 0」。
+ *
+ * 为什么不能直接用 `Number(value)`：
+ *   Number(null) === 0、Number("") === 0、Number([]) === 0
+ * —— 这些「空输入」会被当成合法的 0，然后被夹到区间下界。
+ * 结果：用户清空输入框时，临时倍速会变成 0.25×、跳转秒数变成 1 秒，
+ * 而调用方以为「非法输入会被拒绝、保留旧值」。
+ *
+ * @returns 数值；没有值时返回 null
+ */
+function toNumberOrNull(value: unknown): number | null {
+	if (value == null) return null;
+	if (typeof value === "string") {
+		const t = value.trim();
+		if (t === "") return null;
+		const n = Number(t);
+		return Number.isFinite(n) ? n : null;
+	}
+	if (typeof value === "number") return Number.isFinite(value) ? value : null;
+	// 其它类型（boolean / 对象 / 数组）一律视为「没有值」
+	return null;
+}
+
+/**
  * 归一化跳转秒数：非法值回退到默认 5 秒，并夹到 [SKIP_MIN, SKIP_MAX]。
  */
 export function normalizeSkipSeconds(value: unknown, fallback = 5): number {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  const rounded = Math.round(n);
-  if (rounded < SKIP_MIN) return SKIP_MIN;
-  if (rounded > SKIP_MAX) return SKIP_MAX;
-  return rounded;
+	const n = toNumberOrNull(value);
+	if (n === null) return fallback;
+	const rounded = Math.round(n);
+	if (rounded < SKIP_MIN) return SKIP_MIN;
+	if (rounded > SKIP_MAX) return SKIP_MAX;
+	return rounded;
+}
+
+/**
+ * 归一化临时倍速：非法值回退到 fallback，并夹到 [SPEED_MIN, SPEED_MAX]。
+ *
+ * 与 {@link normalizeSkipSeconds} 同构 —— 两个都是「设置页文本框 → 合法数值」
+ * 的同一类归一化，所以放在一起，行为契约也一致。
+ */
+export function normalizeTempSpeed(value: unknown, fallback = 2): number {
+	const n = toNumberOrNull(value);
+	if (n === null) return fallback;
+	const clamped = Math.max(SPEED_MIN, Math.min(SPEED_MAX, n));
+	// 保留 3 位小数，与 normalizeSpeed 的精度一致
+	return Number(clamped.toFixed(3));
+}
+
+/** 最短时长过滤的取值范围（秒） */
+export const MIN_DURATION_MIN = 1;
+export const MIN_DURATION_MAX = 3600;
+
+/**
+ * 归一化最短时长阈值（秒）：非法值回退到 fallback，并夹到 [1, 3600]。
+ * 与另外两个归一化同构。
+ */
+export function normalizeMinDurationSeconds(value: unknown, fallback = 30): number {
+	const n = toNumberOrNull(value);
+	if (n === null) return fallback;
+	const rounded = Math.round(n);
+	if (rounded < MIN_DURATION_MIN) return MIN_DURATION_MIN;
+	if (rounded > MIN_DURATION_MAX) return MIN_DURATION_MAX;
+	return rounded;
 }
 
 /**

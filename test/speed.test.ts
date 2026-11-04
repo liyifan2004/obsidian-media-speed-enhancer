@@ -6,6 +6,8 @@
 import { describe, it, expect } from "vitest";
 import {
 	DEFAULT_CUSTOM_SPEEDS,
+	MIN_DURATION_MAX,
+	MIN_DURATION_MIN,
 	RATE_EPSILON,
 	SKIP_MAX,
 	SKIP_MIN,
@@ -16,9 +18,11 @@ import {
 	isCurrentRate,
 	isValidSpeed,
 	normalizeButtonOrder,
+	normalizeMinDurationSeconds,
 	normalizeOpacity,
 	normalizeSkipSeconds,
 	normalizeSpeed,
+	normalizeTempSpeed,
 	parseCustomSpeeds,
 } from "../src/speed";
 
@@ -228,5 +232,67 @@ describe("normalizeOpacity", () => {
 	it("非数字回退到默认值", () => {
 		expect(normalizeOpacity(Number.NaN, 6)).toBe(6);
 		expect(normalizeOpacity("x", 16)).toBe(16);
+	});
+});
+
+/**
+ * 下面三个归一化是「设置页文本框 → 合法数值」这一类，行为契约必须一致：
+ * 非法输入回退到 fallback，合法输入夹到区间内。
+ *
+ * 2026-11-04 修复的缺陷：settings.ts 里曾把同样的校验**内联重写**了一遍，
+ * 于是单测覆盖的是这些纯函数，生产跑的却是另一套逻辑（内联版遇到
+ * "5.6" 直接拒绝整个输入，纯函数版则四舍五入到 6）。测试全绿但行为不一致，
+ * 属于最难发现的一类缺陷 —— 现在生产直接调用这些纯函数。
+ */
+describe("normalizeTempSpeed", () => {
+	it("保留区间内的合法值", () => {
+		expect(normalizeTempSpeed(2, 2)).toBe(2);
+		expect(normalizeTempSpeed(SPEED_MIN, 2)).toBe(SPEED_MIN);
+		expect(normalizeTempSpeed(SPEED_MAX, 2)).toBe(SPEED_MAX);
+	});
+
+	it("夹到 [SPEED_MIN, SPEED_MAX]", () => {
+		expect(normalizeTempSpeed(0.1, 2)).toBe(SPEED_MIN);
+		expect(normalizeTempSpeed(99, 2)).toBe(SPEED_MAX);
+	});
+
+	it("非数字回退到默认值", () => {
+		expect(normalizeTempSpeed("abc", 2)).toBe(2);
+		expect(normalizeTempSpeed(undefined, 1.5)).toBe(1.5);
+		expect(normalizeTempSpeed(Number.NaN, 2)).toBe(2);
+	});
+
+	it("保留 3 位小数（与 normalizeSpeed 精度一致）", () => {
+		expect(normalizeTempSpeed(1.23456, 2)).toBe(1.235);
+	});
+});
+
+describe("normalizeMinDurationSeconds", () => {
+	it("保留合法值", () => {
+		expect(normalizeMinDurationSeconds(30, 30)).toBe(30);
+		expect(normalizeMinDurationSeconds(MIN_DURATION_MIN, 30)).toBe(MIN_DURATION_MIN);
+		expect(normalizeMinDurationSeconds(MIN_DURATION_MAX, 30)).toBe(MIN_DURATION_MAX);
+	});
+
+	it("夹到区间内", () => {
+		expect(normalizeMinDurationSeconds(0, 30)).toBe(MIN_DURATION_MIN);
+		expect(normalizeMinDurationSeconds(99999, 30)).toBe(MIN_DURATION_MAX);
+	});
+
+	it("非数字回退到默认值", () => {
+		expect(normalizeMinDurationSeconds("abc", 30)).toBe(30);
+		expect(normalizeMinDurationSeconds(undefined, 45)).toBe(45);
+	});
+});
+
+describe("三个设置归一化的契约一致性", () => {
+	it("非法输入都回退到 fallback 而非抛错", () => {
+		// 三者行为必须同构 —— 这是它们被抽成同一族函数的原因
+		for (const fn of [normalizeTempSpeed, normalizeSkipSeconds, normalizeMinDurationSeconds]) {
+			expect(fn("abc", 7)).toBe(7);
+			expect(fn(Number.NaN, 7)).toBe(7);
+			expect(fn(undefined, 7)).toBe(7);
+			expect(fn(null, 7)).toBe(7);
+		}
 	});
 });

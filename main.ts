@@ -202,27 +202,7 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   // ------------------------------------------------------------------
 
   async onload(): Promise<void> {
-    const stored = (await this.loadData()) as Partial<MediaSpeedEnhancerSettings> & {
-      /** v1.0.27 旧版字段：与 toolbarAutoHide 语义相反 */
-      alwaysExpand?: boolean;
-    };
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, stored, {
-      enabledButtons: Object.assign(
-        {},
-        DEFAULT_SETTINGS.enabledButtons,
-        stored.enabledButtons ?? {}
-      ),
-      buttonOrder: this.normalizeButtonOrder(stored.buttonOrder),
-    });
-    // 兼容旧版本：若旧数据只有“始终展开所有按钮”，转换为统一的自动隐藏开关。
-    if (!("toolbarAutoHide" in stored) && typeof stored.alwaysExpand === "boolean") {
-      this.settings.toolbarAutoHide = !stored.alwaysExpand;
-    }
-
-    // P1-6: 校验旧数据 customSpeeds（如果磁盘上的值超出 0.25-4.0 则归一化）
-    this.settings.customSpeeds = parseCustomSpeeds(
-      this.settings.customSpeeds.join("\n")
-    );
+    await this.loadSettings();
 
     this.addSettingTab(new MediaSpeedEnhancerSettingTab(this.app, this));
 
@@ -297,8 +277,17 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     }
   }
 
+  /**
+   * 读盘 + 归一化设置。
+   *
+   * 这是**唯一**的设置加载路径：`onload` 与（将来的）重新加载都走这里。
+   * 此前 `onload` 内联了一份加载逻辑、`loadSettings` 又写了一份，两份在
+   * 「是否归一化 customSpeeds」上不一致 —— `loadSettings` 漏了归一化，
+   * 一旦有人调用它，磁盘上的非法倍速就会直接进内存。
+   */
   async loadSettings(): Promise<void> {
     const stored = (await this.loadData()) as Partial<MediaSpeedEnhancerSettings> & {
+      /** v1.0.27 旧版字段：与 toolbarAutoHide 语义相反 */
       alwaysExpand?: boolean;
     };
     this.settings = Object.assign({}, DEFAULT_SETTINGS, stored, {
@@ -309,9 +298,15 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
       ),
       buttonOrder: this.normalizeButtonOrder(stored.buttonOrder),
     });
+    // 兼容旧版本：若旧数据只有“始终展开所有按钮”，转换为统一的自动隐藏开关。
     if (!("toolbarAutoHide" in stored) && typeof stored.alwaysExpand === "boolean") {
       this.settings.toolbarAutoHide = !stored.alwaysExpand;
     }
+
+    // P1-6: 校验旧数据 customSpeeds（如果磁盘上的值超出 0.25-4.0 则归一化）
+    this.settings.customSpeeds = parseCustomSpeeds(
+      this.settings.customSpeeds.join("\n")
+    );
   }
 
   private normalizeButtonOrder(order: unknown): ButtonId[] {
