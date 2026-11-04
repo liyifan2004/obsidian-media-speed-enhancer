@@ -5,6 +5,45 @@
 本仓库已发布到 1.0.41（41 个版本），此前一直没有开发记录文件。本文件从 git 历史反推补齐，
 只收录有长期价值的条目；纯样式微调、图标替换等一次性调整不逐条记录。
 
+## 2026-11-04 发布 1.0.42
+
+**包含**：磁盘设置归一化补全 + `loadSettings` 两处崩溃修复 + GitHub Action 统一 v7。
+
+### 为什么这个版本值得尽快发
+
+**「新用户第一次启用插件就会失败」是 P1。**
+
+Obsidian 在插件首次启用、还没有 `data.json` 时，`loadData()` 返回 `null`。
+旧代码把它直接当对象用 → `stored.enabledButtons` 抛 TypeError → `onload()` 失败
+→ **插件根本起不来**。
+
+这个缺陷此前无人发现，因为 `loadSettings` 一直没有任何测试覆盖。
+本轮补了集成测试（`test/load-settings.test.ts`，直接实例化插件类调 `loadSettings()`），
+问题当场暴露。
+
+另两个缺陷：
+
+- `customSpeeds` 为 `null` 或非数组时，`stored.customSpeeds.join("\n")` 抛 TypeError
+- `tempSpeed` 越界时直接赋给 `mediaEl.playbackRate` —— 实测 Chromium 145：
+  `-1` 抛 NotSupportedError、`NaN` 抛 TypeError → **用户按住倍速按钮时插件抛异常**
+
+### 版本号脚本核实
+
+本仓库的 `version-bump.mjs` 用 `JSON.stringify` 写回整个文件（与 Browser-Read-or-Skip 同款实现）。
+**核实结论：本仓库不产生 diff 噪音** —— manifest / package / versions 三个 JSON
+本来就全是展开格式，没有紧凑单行数组。所以不需要改脚本。
+
+（唯一有紧凑数组的是 `tsconfig.json`，但版本号脚本不碰它。
+BRoS 那边是真缺陷，已单独修复 —— 一次版本号改动从 28 行噪音降到 4 行真实改动。）
+
+**版本号 diff 实测**：6 行，全是真实改动（manifest 1 + package 1 + package-lock 2
++ versions.json 新增 1 条）。无噪音。
+
+### 验证
+
+- `npm run verify`（typecheck + test + build）全通过；**82 / 82**（原 31）
+- tag `1.0.42` 指向版本提交
+
 ## 2026-11-04 磁盘设置归一化补全 + loadSettings 崩溃修复（1.0.42 未发布）
 
 **问题证据**：上一轮把「设置归一化收敛到纯函数」做完了设置页那一侧（三个输入框）。
