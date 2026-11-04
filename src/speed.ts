@@ -73,11 +73,15 @@ export function parseCustomSpeeds(input: string): number[] {
   for (const lineRaw of input.split(/\r?\n/)) {
     const line = lineRaw.trim();
     if (!line) continue;
-    const v = Number(line);
-    if (!isValidSpeed(v)) continue;
+    // 复用 normalizeSpeed：它是「倍速合法性 + 3 位小数精度」的唯一定义处。
+    // 此前这里内联了同一套判断（isValidSpeed + toFixed(3)），
+    // 导致 normalizeSpeed 的生产引用数为 0 —— 被单测覆盖的函数根本没跑在生产上，
+    // 规则一旦改动就会漂移（第八轮「两套实现」模式的第三波）。
+    const v = normalizeSpeed(Number(line));
+    if (v === null) continue;
     parsed.push(v);
   }
-  const unique = Array.from(new Set(parsed.map((x) => Number(x.toFixed(3)))));
+  const unique = Array.from(new Set(parsed));
   unique.sort((a, b) => a - b);
   if (unique.length === 0) {
     return [...DEFAULT_CUSTOM_SPEEDS];
@@ -229,4 +233,101 @@ export function normalizeOpacity(value: unknown, fallback: number): number {
   if (rounded < 0) return 0;
   if (rounded > 100) return 100;
   return rounded;
+}
+
+/* ============================================================================
+ * 磁盘设置的归一化
+ * ==========================================================================*/
+
+/**
+ * 从磁盘读到的原始设置（data.json）。
+ *
+ * **全部字段都按「不可信输入」处理**：
+ *   - data.json 是用户可以手改的；
+ *   - 插件升级会带来自上个版本的字段；
+ *   - 跨版本迁移可能留下半个结构。
+ * 因此任何字段都可能是缺失的、类型不对的、越界的。
+ */
+export interface RawSettings {
+	[key: string]: unknown;
+}
+
+/**
+ * 归一化「倍速相关的」磁盘设置。
+ *
+ * ## 为什么必须有这一步
+ *
+ * `playbackRate` 是有硬约束的 —— 实测 Chromium（145）行为：
+ *
+ *   el.playbackRate = -1     → 抛 NotSupportedError（不在支持区间）
+ *   el.playbackRate = NaN    → 抛 TypeError（非有限数）
+ *   el.playbackRate = 0     → **允许**（值是 0，媒体直接停住）
+ *
+ * 也就是说：**未经校验的磁盘值会让插件在用户按住倍速按钮时抛异常**，
+ * 而 `loadSettings` 之前只归一化了 `customSpeeds`，
+ * `tempSpeed` / `skipSeconds` / `minDurationSeconds` 全都是「读到就信」。
+ *
+ * ## 为什么放在 src/speed.ts 而不是 settings.ts
+ *
+ * settings.ts 依赖 `obsidian`（Setting / PluginSettingTab），
+ * 无法在无 DOM 环境下被单测直接 import。src/speed.ts 不 import obsidian，
+ * 所以这份归一化逻辑可以像其他纯函数一样被 vitest 直接覆盖。
+ */
+export interface NormalizedSpeedSettings {
+	tempSpeed: number;
+	customSpeeds: number[];
+	skipSeconds: number;
+	minDurationSeconds: number;
+	buttonOpacity: number;
+	buttonHoverOpacity: number;
+	/** 允许把归一化结果再喂回归一化（幂等性测试用） */
+	[key: string]: unknown;
+}
+
+/**
+ * 把磁盘上的倍速相关设置归一化成一份可安全使用的值。
+ *
+ * @param raw 磁盘上读到的原始对象（不可信）
+ * @param defaults 出厂默认值（用来说明每个字段的回退目标）
+ */
+export function normalizeSpeedSettings(
+	raw: RawSettings | null | undefined,
+	defaults: {
+		tempSpeed: number;
+		customSpeeds: readonly number[];
+		skipSeconds: number;
+		minDurationSeconds: number;
+		buttonOpacity: number;
+		buttonHoverOpacity: number;
+	}
+): NormalizedSpeedSettings {
+	const source = (raw ?? {}) as RawSettings;
+
+	// customSpeeds：磁盘上可能是 null / 字符串 / 数字（旧版本存的是数组，
+	// 但手改过就什么都可能）。旧代码直接 `stored.customSpeeds.join("\n")`
+	// —— null 与非数组会抛 TypeError，整个插件起不来。
+	// 这里先判类型再走解析，解析失败回退出厂列表。
+	let customSpeeds: number[];
+	if (Array.isArray(source.customSpeeds)) {
+		customSpeeds = parseCustomSpeeds(
+			source.customSpeeds.map((x) => String(x)).join("\n")
+		);
+	} else {
+		customSpeeds = [...defaults.customSpeeds];
+	}
+
+	return {
+		tempSpeed: normalizeTempSpeed(source.tempSpeed, defaults.tempSpeed),
+		customSpeeds,
+		skipSeconds: normalizeSkipSeconds(source.skipSeconds, defaults.skipSeconds),
+		minDurationSeconds: normalizeMinDurationSeconds(
+			source.minDurationSeconds,
+			defaults.minDurationSeconds
+		),
+		buttonOpacity: normalizeOpacity(source.buttonOpacity, defaults.buttonOpacity),
+		buttonHoverOpacity: normalizeOpacity(
+			source.buttonHoverOpacity,
+			defaults.buttonHoverOpacity
+		),
+	};
 }

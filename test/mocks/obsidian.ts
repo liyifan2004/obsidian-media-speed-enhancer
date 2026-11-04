@@ -153,3 +153,20 @@ export class Notice {
 }
 
 export const Platform = { isDesktopApp: true, isMobileApp: false };
+
+/**
+ * moment 桩：i18n.ts 用 `moment.locale()` 取当前界面语言。
+ *
+ * 桩默认返回 "en"；测试需要中文文案时可以调用 `setLocale()`。
+ */
+export const moment = {
+	locale(): string {
+		return currentLocale;
+	},
+};
+
+let currentLocale = "en";
+
+export function setLocale(loc: string): void {
+	currentLocale = loc;
+}

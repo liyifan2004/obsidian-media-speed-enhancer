@@ -14,6 +14,9 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
+    "paths": {
+      "@main": ["./main.ts"]
+    },
     "lib": [
       "DOM",
       "ES2020"

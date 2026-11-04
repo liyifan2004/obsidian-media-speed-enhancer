@@ -5,6 +5,70 @@
 本仓库已发布到 1.0.41（41 个版本），此前一直没有开发记录文件。本文件从 git 历史反推补齐，
 只收录有长期价值的条目；纯样式微调、图标替换等一次性调整不逐条记录。
 
+## 2026-11-04 磁盘设置归一化补全 + loadSettings 崩溃修复（1.0.42 未发布）
+
+**问题证据**：上一轮把「设置归一化收敛到纯函数」做完了设置页那一侧（三个输入框）。
+但**读盘那一侧没跟上** —— `loadSettings()` 仍然只归一化 `customSpeeds`，
+`tempSpeed` / `skipSeconds` / `minDurationSeconds` 全是「读到就信」。
+
+这些值不是装饰性的。实测 Chromium 145 的 `playbackRate` 行为：
+
+| 赋值 | 结果 |
+| --- | --- |
+| `el.playbackRate = -1` | 抛 `NotSupportedError`（不在支持区间） |
+| `el.playbackRate = NaN` | 抛 `TypeError`（非有限数） |
+| `el.playbackRate = 0` | **允许**（媒体停住，但值确实是 0） |
+
+而 `tempSpeed` 会被直接赋给 `mediaEl.playbackRate`（按住倍速按钮 / 快捷键
+`toggleHoldSpeed`）→ **脏数据会让插件在用户按住倍速时抛异常**。
+
+另外两个更硬的崩溃：
+
+1. **`loadData()` 返回 null 时 `loadSettings()` 直接抛 TypeError**
+   （`stored.enabledButtons` 读 null 的属性）。Obsidian 在插件**首次启用**、
+   还没有 `data.json` 时就返回 null —— 也就是**新用户第一次启用插件就会失败**。
+   这条是新写集成测试时当场暴露的（此前 `loadSettings` 没有任何测试覆盖）。
+2. **`customSpeeds` 为 null 或非数组时抛 TypeError**
+   （旧代码 `stored.customSpeeds.join("\n")`）。实测：
+   `null` → `Cannot read properties of null (reading 'join')`；
+   `"abc"` / `5` → `v.join is not a function`。
+
+第三条（同型，第八轮「两套实现」模式的第三波）：
+**`parseCustomSpeeds` 内联复刻了 `normalizeSpeed` 的逻辑**
+（`isValidSpeed` + `toFixed(3)`），导致 `normalizeSpeed` 的**生产引用数为 0**
+—— 被单测覆盖的函数根本没跑在生产上，规则一改就会漂移。
+
+**方案**：
+
+- `src/speed.ts` 新增 `normalizeSpeedSettings(raw, defaults)` —— 纯函数、
+  不 import obsidian，把 `tempSpeed` / `customSpeeds` / `skipSeconds` /
+  `minDurationSeconds` / 两个透明度一次性归一化。
+  「不可信输入」的判定沿用同 fleet 的 `obsidian-jev-inbox-router`
+  的 `src/settings-normalize.ts` 约定（字段可缺失、类型不对、越界一律退回默认）。
+- `parseCustomSpeeds` 改为调用 `normalizeSpeed`，消掉重复实现。
+- `main.ts` 的 `loadSettings()` 调用 `normalizeSpeedSettings`，
+  并对 `loadData()` 返回 null 做兜底（`raw ?? {}`）。
+- `test/mocks/obsidian.ts` 补 `moment` 桩 —— 此前 i18n.ts 依赖
+  `moment.locale()`，导致 `main.ts` 根本无法在测试里 import，
+  `loadSettings` 这类**真实调用链**无法被覆盖。
+
+**测试**：31 → **82**（新增 `test/settings-normalize.test.ts` 15 例 +
+`test/load-settings.test.ts` 12 例）。后者直接实例化插件类、调 `loadSettings()`、
+断言 `plugin.settings` 的最终值 —— 只测纯函数不能保证「调用点真的调了它」，
+这正是本仓库前一轮踩过的坑。
+
+**踩到的坑**：`import MediaSpeedEnhancerPlugin from "../main"` 会命中**构建产物
+`main.js`** 而不是源码 `main.ts`（仓库根目录两个文件同名）→ 测试跑的是上一次
+构建的旧代码。已加 vitest alias `@main` → `main.ts` 并在 tsconfig 里配
+`paths`。这是「源码改了、测试可能假绿」的通用陷阱。
+
+**验证**：`npm run verify`（typecheck + test + build）全通过；
+`npm test` 82/82。
+
+**反证**（用例有效性）：把 `loadSettings` 改回旧逻辑 → 6 个用例挂掉；
+把 `raw ?? {}` 改回 `raw` → 「磁盘是 null 时回退出厂设置」挂掉并报
+`TypeError: Cannot read properties of null (reading 'enabledButtons')`。
+
 ## 2026-11-04 设置归一化收敛（1.0.42 未发布）
 
 **问题证据**：上一轮把倍速规则抽到 `src/speed.ts`（纯模块，单测覆盖），

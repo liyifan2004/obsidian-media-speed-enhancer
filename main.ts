@@ -9,6 +9,7 @@ import {
   formatRate,
   isCurrentRate,
   normalizeButtonOrder,
+  normalizeSpeedSettings,
   parseCustomSpeeds,
 } from "./src/speed";
 
@@ -284,10 +285,26 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
    * 此前 `onload` 内联了一份加载逻辑、`loadSettings` 又写了一份，两份在
    * 「是否归一化 customSpeeds」上不一致 —— `loadSettings` 漏了归一化，
    * 一旦有人调用它，磁盘上的非法倍速就会直接进内存。
+   *
+   * 归一化本身交给 src/speed.ts 的 normalizeSpeedSettings（纯函数，可单测）：
+   * 磁盘上的 data.json 用户可以手改，字段可能缺失、类型不对、越界。
+   * **未经归一化的值会真的炸** —— 实测 Chromium：
+   *   el.playbackRate = -1  → NotSupportedError
+   *   el.playbackRate = NaN → TypeError
+   * 而 tempSpeed 会被直接赋给 mediaEl.playbackRate（按住倍速 / 快捷键）。
    */
   async loadSettings(): Promise<void> {
-    const stored = (await this.loadData()) as Partial<MediaSpeedEnhancerSettings> & {
-      /** v1.0.27 旧版字段：与 toolbarAutoHide 语义相反 */
+    // loadData() 在「插件首次启用」时返回 null（Obsidian 不会为一个没存过数据的
+    // 插件创建 data.json）。旧代码把它直接当对象用 → stored.enabledButtons 抛
+    // TypeError → onload 失败 → 插件根本起不来。
+    const raw = (await this.loadData()) as
+      | (Partial<MediaSpeedEnhancerSettings> & {
+          /** v1.0.27 旧版字段：与 toolbarAutoHide 语义相反 */
+          alwaysExpand?: boolean;
+        })
+      | null
+      | undefined;
+    const stored = (raw ?? {}) as Partial<MediaSpeedEnhancerSettings> & {
       alwaysExpand?: boolean;
     };
     this.settings = Object.assign({}, DEFAULT_SETTINGS, stored, {
@@ -303,10 +320,23 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
       this.settings.toolbarAutoHide = !stored.alwaysExpand;
     }
 
-    // P1-6: 校验旧数据 customSpeeds（如果磁盘上的值超出 0.25-4.0 则归一化）
-    this.settings.customSpeeds = parseCustomSpeeds(
-      this.settings.customSpeeds.join("\n")
-    );
+    // 倍速相关的数值字段全部按「不可信输入」归一化。
+    // 此前只归一化了 customSpeeds，tempSpeed / skipSeconds / minDurationSeconds
+    // 是「读到就信」—— 脏数据会一路流到 playbackRate 赋值与时长比较。
+    const normalized = normalizeSpeedSettings(stored, {
+      tempSpeed: DEFAULT_SETTINGS.tempSpeed,
+      customSpeeds: DEFAULT_SETTINGS.customSpeeds,
+      skipSeconds: DEFAULT_SETTINGS.skipSeconds,
+      minDurationSeconds: DEFAULT_SETTINGS.minDurationSeconds,
+      buttonOpacity: DEFAULT_SETTINGS.buttonOpacity,
+      buttonHoverOpacity: DEFAULT_SETTINGS.buttonHoverOpacity,
+    });
+    this.settings.tempSpeed = normalized.tempSpeed;
+    this.settings.customSpeeds = normalized.customSpeeds;
+    this.settings.skipSeconds = normalized.skipSeconds;
+    this.settings.minDurationSeconds = normalized.minDurationSeconds;
+    this.settings.buttonOpacity = normalized.buttonOpacity;
+    this.settings.buttonHoverOpacity = normalized.buttonHoverOpacity;
   }
 
   private normalizeButtonOrder(order: unknown): ButtonId[] {
