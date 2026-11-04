@@ -10,7 +10,6 @@ import {
   isCurrentRate,
   normalizeButtonOrder,
   normalizeSpeedSettings,
-  parseCustomSpeeds,
 } from "./src/speed";
 
 // ============================================================================
@@ -109,6 +108,17 @@ function buildIcon(
 // ----------------------------------------------------------------------------
 // 类型
 // ----------------------------------------------------------------------------
+
+/**
+ * 磁盘上读到的原始设置。
+ *
+ * data.json 是用户可以手改的，插件升级也会带来自上个版本的字段 ——
+ * 因此字段可能缺失、类型不对、越界。所有字段都按「不可信输入」处理。
+ */
+type StoredSettings = Partial<MediaSpeedEnhancerSettings> & {
+  /** v1.0.27 旧版字段：与 toolbarAutoHide 语义相反 */
+  alwaysExpand?: boolean;
+};
 
 interface ToolbarCleanup {
   toolbar: HTMLElement;
@@ -297,16 +307,11 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
     // loadData() 在「插件首次启用」时返回 null（Obsidian 不会为一个没存过数据的
     // 插件创建 data.json）。旧代码把它直接当对象用 → stored.enabledButtons 抛
     // TypeError → onload 失败 → 插件根本起不来。
-    const raw = (await this.loadData()) as
-      | (Partial<MediaSpeedEnhancerSettings> & {
-          /** v1.0.27 旧版字段：与 toolbarAutoHide 语义相反 */
-          alwaysExpand?: boolean;
-        })
-      | null
-      | undefined;
-    const stored = (raw ?? {}) as Partial<MediaSpeedEnhancerSettings> & {
-      alwaysExpand?: boolean;
-    };
+    //
+    // 用类型标注而不是 `as` 断言：断言在「raw 已经 narrow 过」时是多余的，
+    // Obsidian 商店审查会把它列为 Warning（不改变表达式类型的断言）。
+    const raw = (await this.loadData()) as StoredSettings | null | undefined;
+    const stored: StoredSettings = raw ?? {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, stored, {
       enabledButtons: Object.assign(
         {},

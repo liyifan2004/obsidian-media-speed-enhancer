@@ -1,4 +1,10 @@
-import { App, PluginSettingTab, Setting, SliderComponent } from "obsidian";
+import {
+  App,
+  PluginSettingTab,
+  Setting,
+  SliderComponent,
+  type SettingDefinitionItem,
+} from "obsidian";
 import { t } from "./i18n";
 import type MediaSpeedEnhancerPlugin from "./main";
 import {
@@ -124,6 +130,19 @@ export const DEFAULT_SETTINGS: MediaSpeedEnhancerSettings = {
  *  3. 跳转     - 后退/前进秒数
  *  4. 工具栏   - 自动隐藏 / 最短时长过滤
  *  5. 兼容性   - 触摸优化
+ *
+ * ## 两个渲染器，一份 schema
+ *
+ *   - {@link getSettingDefinitions} —— 声明式 API，Obsidian 1.13+ 用。
+ *     除了渲染设置，还把每一项登记进 Obsidian 的**设置搜索**
+ *     （1.13+ 的用户在设置里搜「倍速」能直接定位到本插件）。
+ *     没有它，本插件的设置在 1.13+ 的搜索里**完全不出现** ——
+ *     Obsidian 商店审查把这条列为 Warning。
+ *   - {@link display} —— 命令式 fallback，给 Obsidian 1.5.0–1.12
+ *     （本插件的 minAppVersion）用，那些版本没有声明式 API。
+ *
+ * 1.13+ 一旦 getSettingDefinitions() 返回非空数组，Obsidian 就不再走 display()，
+ * 两者不会重复渲染。与同 fleet 的 obsidian-folio 同一套模式。
  */
 export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   private readonly plugin: MediaSpeedEnhancerPlugin;
@@ -141,11 +160,310 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
+  // ===========================================================================
+  // 声明式路径（Obsidian 1.13+）
+  // ===========================================================================
+
+  /**
+   * 声明式设置定义。
+   *
+   * **分组标题不重复插件名** —— 商店审查明确要求
+   * 「设置标题里不要包含插件名」（1.0.42 因此被下架）。
+   * 这里的 heading 都是功能分类名（按钮 / 倍速 / 跳转 / 工具栏 / 兼容性），
+   * 不是插件名。
+   *
+   * `searchable: false` 用在「按钮列表」上：它是一个可拖拽的自定义渲染块，
+   * 没有单一名称可搜，让它进搜索反而会匹配出噪声。
+   */
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    return [
+      {
+        type: "group",
+        heading: t("headingButtons"),
+        items: [
+          {
+            name: t("headingButtonAppearance"),
+            desc: t("descBgOpacity"),
+            searchable: false,
+            render: (setting: Setting) => this.renderAppearanceGroup(setting),
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: t("headingSpeed"),
+        items: [
+          {
+            name: t("labelTempSpeed"),
+            desc: t("descTempSpeed"),
+            control: {
+              key: "tempSpeed",
+              type: "number",
+              min: SPEED_MIN,
+              max: SPEED_MAX,
+              step: 0.25,
+              defaultValue: DEFAULT_SETTINGS.tempSpeed,
+              validate: (value: number) => this.validateSpeed(value, SPEED_MIN, SPEED_MAX),
+            },
+          },
+          {
+            name: t("labelCustomSpeeds"),
+            desc: t("descCustomSpeeds", { min: SPEED_MIN, max: SPEED_MAX }),
+            control: {
+              key: "customSpeedsText",
+              type: "textarea",
+              rows: 10,
+              defaultValue: formatCustomSpeeds(DEFAULT_CUSTOM_SPEEDS),
+            },
+          },
+          {
+            name: t("labelGlobalSync"),
+            desc: t("descGlobalSync"),
+            control: {
+              key: "globalSync",
+              type: "toggle",
+              defaultValue: DEFAULT_SETTINGS.globalSync,
+            },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: t("headingSkip"),
+        items: [
+          {
+            name: t("labelSkipSeconds"),
+            desc: t("descSkipSeconds"),
+            control: {
+              key: "skipSeconds",
+              type: "number",
+              min: SKIP_MIN,
+              max: SKIP_MAX,
+              step: 1,
+              defaultValue: DEFAULT_SETTINGS.skipSeconds,
+              validate: (value: number) => this.validateSpeed(value, SKIP_MIN, SKIP_MAX),
+            },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: t("headingToolbar"),
+        items: [
+          {
+            name: t("labelAutoHide"),
+            desc: t("descAutoHide"),
+            control: {
+              key: "toolbarAutoHide",
+              type: "toggle",
+              defaultValue: DEFAULT_SETTINGS.toolbarAutoHide,
+            },
+          },
+          {
+            name: t("labelMinDuration"),
+            desc: t("descMinDuration"),
+            control: {
+              key: "enableMinDuration",
+              type: "toggle",
+              defaultValue: DEFAULT_SETTINGS.enableMinDuration,
+            },
+          },
+          {
+            name: t("labelMinDurationSeconds"),
+            desc: t("descMinDurationSeconds"),
+            control: {
+              key: "minDurationSeconds",
+              type: "number",
+              min: MIN_DURATION_MIN,
+              max: MIN_DURATION_MAX,
+              step: 1,
+              defaultValue: DEFAULT_SETTINGS.minDurationSeconds,
+              validate: (value: number) =>
+                this.validateSpeed(value, MIN_DURATION_MIN, MIN_DURATION_MAX),
+            },
+          },
+          {
+            name: t("labelAutoPlayNext"),
+            desc: t("descAutoPlayNext"),
+            control: {
+              key: "enableSequentialPlay",
+              type: "toggle",
+              defaultValue: DEFAULT_SETTINGS.enableSequentialPlay,
+            },
+          },
+          {
+            name: t("labelSwitchChime"),
+            desc: t("descSwitchChime"),
+            control: {
+              key: "sequentialPlayTone",
+              type: "toggle",
+              defaultValue: DEFAULT_SETTINGS.sequentialPlayTone,
+            },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: t("headingCompat"),
+        items: [
+          {
+            name: t("labelTouch"),
+            desc: t("descTouch"),
+            control: {
+              key: "enableTouchOptimization",
+              type: "toggle",
+              defaultValue: DEFAULT_SETTINGS.enableTouchOptimization,
+            },
+          },
+        ],
+      },
+    ];
+  }
+
+  /** 声明式控件的取值：统一从 plugin.settings 读 */
+  override getControlValue(key: string): unknown {
+    const settings = this.plugin.settings as unknown as Record<string, unknown>;
+    // customSpeeds 在设置里是 number[]，但声明式 textarea 控件要的是文本。
+    if (key === "customSpeedsText") {
+      return formatCustomSpeeds(settings.customSpeeds as number[]);
+    }
+    return settings[key];
+  }
+
+  /**
+   * 声明式控件的写入：赋值 + 副作用 + 持久化。
+   *
+   * 副作用集中在这里 —— 声明式 API 的所有控件共用这一个出口，
+   * 所以「改了设置要做什么」只有一处实现，不会像命令式那样散落在
+   * 每个 onChange 里。
+   */
+  override async setControlValue(key: string, value: unknown): Promise<void> {
+    const settings = this.plugin.settings as unknown as Record<string, unknown>;
+
+    switch (key) {
+      case "tempSpeed": {
+        // 归一化走 src/speed.ts 的纯函数（被单测覆盖），不另写一份内联校验
+        const num = normalizeTempSpeed(value, DEFAULT_SETTINGS.tempSpeed);
+        settings.tempSpeed = num;
+        break;
+      }
+      case "customSpeedsText": {
+        // 文本 → 倍速列表：解析、过滤非法值、去重、排序
+        const parsed = parseCustomSpeeds(String(value ?? ""));
+        settings.customSpeeds = parsed;
+        break;
+      }
+      case "skipSeconds": {
+        const num = normalizeSkipSeconds(value, DEFAULT_SETTINGS.skipSeconds);
+        settings.skipSeconds = num;
+        break;
+      }
+      case "minDurationSeconds": {
+        const num = normalizeMinDurationSeconds(
+          value,
+          DEFAULT_SETTINGS.minDurationSeconds
+        );
+        settings.minDurationSeconds = num;
+        break;
+      }
+      case "globalSync":
+        settings.globalSync = Boolean(value);
+        break;
+      case "toolbarAutoHide":
+        settings.toolbarAutoHide = Boolean(value);
+        break;
+      case "enableMinDuration":
+        settings.enableMinDuration = Boolean(value);
+        break;
+      case "enableSequentialPlay":
+        settings.enableSequentialPlay = Boolean(value);
+        break;
+      case "sequentialPlayTone":
+        settings.sequentialPlayTone = Boolean(value);
+        break;
+      case "enableTouchOptimization":
+        settings.enableTouchOptimization = Boolean(value);
+        break;
+      default:
+        settings[key] = value;
+        break;
+    }
+
+    await this.plugin.saveSettings();
+
+    // 需要立刻反映到已注入的工具栏上的设置：
+    // 按钮 label 会用新的 skipSeconds，外观用新的透明度。
+    if (key === "skipSeconds" || key === "toolbarAutoHide" || key === "globalSync") {
+      await this.plugin.refreshAllToolbars();
+    }
+  }
+
+  /**
+   * 数值控件的校验：越界时给出提示，而不是默默改掉用户输入。
+   *
+   * 返回空字符串表示接受；返回非空字符串会被 Obsidian 显示在控件下方。
+   */
+  private validateSpeed(value: number, min: number, max: number): string | void {
+    if (!Number.isFinite(value)) return t("errNotANumber");
+    if (value < min || value > max) return t("errOutOfRange", { min, max });
+    return undefined;
+  }
+
+  /**
+   * 「按钮外观」分组（背景透明度 / 悬停透明度）。
+   *
+   * 用 render 而不是 control：这两个滑块需要**实时**更新 CSS 变量
+   * （--mse-btn-opacity / --mse-btn-hover-opacity），
+   * 而声明式的 slider 控件没有「拖动中」回调。
+   *
+   * 注意：这里的 Setting 由框架创建（render 回调收到的是现成的 Setting），
+   * 所以要把滑块**挂到它上面**，不能再 new 一个 Setting 塞进去 ——
+   * 那会造成 Setting 嵌套 Setting 的异常布局。
+   */
+  private renderAppearanceGroup(setting: Setting): void {
+    setting.settingEl.addClass("mse-appearance-group");
+
+    const bgSetting = new Setting(setting.controlEl)
+      .setName(t("labelBgOpacity"))
+      .setDesc(t("descBgOpacity"));
+    this.attachOpacitySlider(
+      bgSetting,
+      this.plugin.settings.buttonOpacity,
+      "buttonOpacity",
+      (v) => {
+        this.plugin.settings.buttonOpacity = v;
+        document.documentElement.style.setProperty(
+          "--mse-btn-opacity",
+          String(v / 100)
+        );
+      }
+    );
+
+    const hoverSetting = new Setting(setting.controlEl)
+      .setName(t("labelHoverOpacity"))
+      .setDesc(t("descHoverOpacity"));
+    this.attachOpacitySlider(
+      hoverSetting,
+      this.plugin.settings.buttonHoverOpacity,
+      "buttonHoverOpacity",
+      (v) => {
+        this.plugin.settings.buttonHoverOpacity = v;
+        document.documentElement.style.setProperty(
+          "--mse-btn-hover-opacity",
+          String(v / 100)
+        );
+      }
+    );
+  }
+
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
 
-    new Setting(containerEl).setName("Media Speed Enhancer").setHeading();
+    // 不要在这里放 `setName("Media Speed Enhancer").setHeading()` ——
+    // Obsidian 商店审查明确要求「设置标题里不要重复插件名」：
+    // 设置页顶部已经显示插件名，再写一遍既冗余，也会让审查不通过（1.0.42 被下架）。
+    // 各分组的标题由 renderXxxSection 自己的 heading 提供。
 
     this.renderButtonsSection(containerEl);
     this.renderSpeedSection(containerEl);
@@ -689,18 +1007,21 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
   // ===========================================================================
   // 工具：滑块
   // ===========================================================================
-  private renderOpacitySlider(
-    root: HTMLElement,
-    name: string,
-    desc: string,
+
+  /**
+   * 往一个已存在的 Setting 上挂透明度滑块 + 还原按钮。
+   *
+   * 抽出来的原因：命令式路径（Obsidian 1.5–1.12）需要**新建**一个 Setting，
+   * 声明式路径（1.13+）拿到的是框架已经建好的 Setting ——
+   * 在它的 controlEl 里再 new 一个 Setting 会造成嵌套布局。
+   * 两条路径共用同一份「滑块 + 还原」逻辑，行为才不会漂移。
+   */
+  private attachOpacitySlider(
+    setting: Setting,
     initial: number,
     settingKey: "buttonOpacity" | "buttonHoverOpacity",
     onChange: (value: number) => void
   ): void {
-    const setting = new Setting(root)
-      .setName(name)
-      .setDesc(desc);
-
     let slider: SliderComponent | null = null;
     setting.addSlider((s) => {
       slider = s;
@@ -724,5 +1045,20 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
         })
     );
     // 初始值已由 addSlider 回调内的 setValue(initial) 设置
+  }
+
+  /** 命令式路径：新建 Setting 并挂上透明度滑块 */
+  private renderOpacitySlider(
+    root: HTMLElement,
+    name: string,
+    desc: string,
+    initial: number,
+    settingKey: "buttonOpacity" | "buttonHoverOpacity",
+    onChange: (value: number) => void
+  ): void {
+    const setting = new Setting(root)
+      .setName(name)
+      .setDesc(desc);
+    this.attachOpacitySlider(setting, initial, settingKey, onChange);
   }
 }

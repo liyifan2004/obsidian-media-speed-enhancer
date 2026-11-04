@@ -61,6 +61,8 @@ const en = {
 	headingCompat: "Compatibility",
 	labelTouch: "Touch optimization",
 	descTouch: "Use pointer events for touch screens; when off, only mousedown/mouseup are bound.",
+	errNotANumber: "Enter a number.",
+	errOutOfRange: "Must be between {min} and {max}.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -117,6 +119,8 @@ const zh: Record<keyof typeof en, string> = {
 	headingCompat: "兼容性",
 	labelTouch: "启用触摸优化",
 	descTouch: "使用 pointer events 适配触屏；关闭时仅绑 mousedown/mouseup。",
+	errNotANumber: "请输入数字。",
+	errOutOfRange: "必须在 {min} 与 {max} 之间。",
 };
 
 const localeMap: Record<string, Partial<typeof en>> = {

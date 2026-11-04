@@ -42,6 +42,17 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # CSS lint —— 与 Obsidian 商店审查同一份规则集。
+      #
+      # 1.0.42 因为引入了 !important 与 :has() 被商店审查警告，
+      # 插件从目录列表里下架。把 stylelint-config-obsidianmd 接进 CI，
+      # 这两类问题会在**提交时**被拦下，而不是等到发版后被打回。
+      #
+      # 配置见 stylelint.config.mjs：强制 !important / :has() 两条
+      # 行为性规则，纯风格类规则关闭（存量 CSS 早于这套规则）。
+      - name: CSS lint
+        run: npm run lint:styles
+
       - name: Tests
         run: npm run test
 

@@ -2,8 +2,113 @@
 
 面向维护者的开发日志：每次实质性开发记一条。只记有长期价值的内容，调试细节不入。
 
-本仓库已发布到 1.0.41（41 个版本），此前一直没有开发记录文件。本文件从 git 历史反推补齐，
+本仓库已发布到 1.0.42（42 个版本），此前一直没有开发记录文件。本文件从 git 历史反推补齐，
 只收录有长期价值的条目；纯样式微调、图标替换等一次性调整不逐条记录。
+
+## 2026-11-04 商店审查修复：声明式 settings + CSS lint 合规（1.0.43 未发布）
+
+**背景**：1.0.42 被 Obsidian 社区商店审查打回，插件从目录列表里下架。
+审查意见分三类，本轮逐条处理。
+
+### Error（会导致下架）
+
+**「Avoid including the plugin name in settings headings」**
+`settings.ts` 里有 `new Setting(containerEl).setName("Media Speed Enhancer").setHeading()`。
+
+Obsidian 官方指南（Plugin guidelines → UI text）明确要求：
+「Avoid adding a top-level heading in the settings tab, such as "General",
+"Settings", or **the name of your plugin**」—— 设置页顶部已经显示插件名，
+再写一遍既冗余，又违反这条约定。
+
+**已删除**。各分组的标题由各自的 `renderXxxSection` 提供（按钮 / 倍速 / 跳转 /
+工具栏 / 兼容性），都不是插件名。
+
+### Warning（会让设置项对用户不可达）
+
+**「This PluginSettingTab does not implement getSettingDefinitions(); its settings
+will not appear in Obsidian's settings search for users on 1.13.0 or later.」**
+
+这不是 cosmetic 问题 —— **在 Obsidian 1.13+ 上，用户在设置里搜「倍速」根本找不到
+本插件**。
+
+**已实现声明式 settings**，与同 fleet 的 obsidian-folio 同一套模式
+（一个 schema，两个 renderer）：
+
+- `getSettingDefinitions()` —— 1.13+ 用的声明式 API。除了渲染设置，
+  它还把每一项登记进 Obsidian 的**设置搜索**。
+- `display()` —— 命令式 fallback，给 Obsidian 1.5.0–1.12（本插件的 minAppVersion）
+  用，那些版本没有声明式 API。
+
+1.13+ 一旦 `getSettingDefinitions()` 返回非空数组，Obsidian 就不再走 `display()`，
+两者不会重复渲染。
+
+**副作用集中在 `setControlValue` 一个出口**：声明式 API 的所有控件共用它，
+所以「改了设置要做什么」（刷新工具栏 / 更新 CSS 变量 / 归一化）只有一处实现，
+不会像命令式那样散落在每个 `onChange` 里。
+
+数值控件用 `validate` 回调给出越界提示，而不是默默改掉用户输入。
+
+**新增 21 例行为测试**（`test/declarative-settings.test.ts`）。
+只靠 typecheck 证明不了「绑定是对的」——类型对了不代表
+`getControlValue` 读的是对的字段、`setControlValue` 写的是对的字段、
+归一化走的是被单测覆盖的那份纯函数。
+
+### Recommendation / Warning（源码层面）
+
+- **「'parseCustomSpeeds' is defined but never used」**（main.ts:13）——
+  上一轮改用 `normalizeSpeedSettings` 后就没人用了，已删掉导入。
+- **「This assertion is unnecessary since it does not change the type of the
+  expression」**（main.ts:307-309、src/speed.ts:304）——
+  `as` 断言在类型已 narrow 过时是多余的，改用类型标注。
+  `main.ts` 新增 `StoredSettings` 类型别名，把「磁盘上读到的原始设置」
+  这个概念显式化。
+
+### CSS lint
+
+**「Avoid !important」**（19 处）—— 全部清零，改用提高特异性：
+
+| 原来的写法 | 改成 | 理由 |
+| --- | --- | --- |
+| `.mse-btn { background: ... !important }` | `.mse-container .mse-btn { ... }` | (0,2,0) 压过宿主的 `.markdown-preview-view button` (0,1,1) |
+| `.mse-hold-speed.is-active { ... !important }` | `.mse-btn.mse-hold-speed.is-active { ... }` | (0,3,0) 压过 `.mse-btn:hover` (0,2,0) |
+| `.mse-ancestor-overflow-visible { ... !important }` | `.mse-ancestor-overflow-visible.mse-ancestor-overflow-visible { ... }` | 类名重复 → (0,2,0)，压过主题的 (0,1,0)，且主题仍可用更高特异性覆盖回来 |
+
+**「Avoid :has」**（4 处）—— 直接删除，因为它们是**死代码**：
+v1.0.25 起位置完全由 JS 的 inline style 控制（`setAudioPosition` →
+`mediaEl.style.marginLeft` / `style.width`），inline style 的优先级高于任何
+样式表规则，这些 CSS 规则从来没生效过。
+
+而且原来的 `:has()` 版本还与 JS 打架：CSS 说 152px，JS 说按实际按钮数算出来的值。
+去掉之后只剩 JS 一套事实来源。
+
+**这次没有靠推断 —— 真实 Chromium 实测过**（Playwright，宿主带
+`.markdown-preview-view button { box-shadow: ... }`）：
+
+- 第一版只把 `.mse-btn` 提到 (0,1,0)，实测 `boxShadow` 仍是宿主页面的
+  `5px 5px 5px black` —— **被宿主页赢走了**。
+- 加上 `.mse-container .mse-btn` (0,2,0) 后，实测 `boxShadow = none`。
+- 祖先容器的 `overflow` 也实测为 `visible`（宿主页写的是 `overflow: hidden`）。
+
+**新增 stylelint，接进 CI**：`stylelint-config-obsidianmd` 是
+**Obsidian 商店审查用的同一份规则集**。接进 CI 意味着这两类问题会在
+**提交时**被拦下，而不是等到发版后被打回、插件从列表里下架。
+
+配置里只强制审查关心的两条行为性规则（`!important` / `:has()`），
+纯风格类规则（空行、rgba→rgb、kebab-case……）关闭 ——
+那些是几百行的纯排版改动，不解决审查问题，却会淹没真正需要 review 的 diff。
+要改另开一个专门的提交做。
+
+**反证**（用例有效性验证）：临时加回 `!important` → stylelint 报
+`declaration-no-important`；临时加回 `:has()` → 报
+`selector-pseudo-class-disallowed-list`。恢复后零告警。
+
+### 验证
+
+- `npm run verify`（typecheck + **stylelint** + test + build）全通过
+- 测试 82 → **103**（新增 21 例声明式 settings 行为测试）
+- `npm audit` 的 7 条 moderate 全部来自 `obsidian` 包自带的 `moment`
+  （peer 依赖，不可修）；`obsidian` 已被 esbuild external，
+  **不进发布产物**；1.0.41 已有同样 3 处 moment 引用，非本轮引入
 
 ## 2026-11-04 发布 1.0.42
 

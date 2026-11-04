@@ -59,6 +59,19 @@
    在运行时由 JS 注入，避免每张样式表写死 0.06 / 0.16。
    默认值仍保留 fallback 以保证未注入变量时按钮仍可见。
    --------------------------------------------------------------------------- */
+/*
+ * v1.0.43: 去掉 background / box-shadow / text-shadow 的 !important。
+ *
+ * 为什么不靠提高特异性：这些按钮是 <button> 元素，宿主页与 Obsidian
+ * 主题都可能给 button 写样式（例如 `button { background: var(--background-modifier) }`，
+ * 特异性 (0,0,1)）。这里用 `.mse-anchor, .mse-btn` (0,1,0) 已经高于它，
+ * 主题里的 `button:hover` (0,1,1) 才需要额外的类名叠加。
+ *
+ * 但**只写 .mse-btn 还不够** —— 实测（真实 Chromium，宿主带
+ * `.markdown-preview-view button { box-shadow: ... }` (0,1,1)）：
+ * box-shadow 会被宿主页赢走。所以真正的兜底是下面的
+ * `.mse-container .mse-btn` (0,2,0) —— 压得过 (0,1,1)。
+ */
 .mse-anchor,
 .mse-btn {
   display: inline-flex;
@@ -77,9 +90,9 @@
     127,
     127,
     var(--mse-btn-opacity, 0.06)
-  ) !important;
-  box-shadow: none !important;
-  text-shadow: none !important;
+  );
+  box-shadow: none;
+  text-shadow: none;
   color: var(--text-muted, #888);
   cursor: pointer;
   font-family: inherit;
@@ -91,7 +104,30 @@
   transition: background 0.12s ease, color 0.12s ease;
 }
 
-/* 仅 hover 时有微妙的背景变化（和原生一样） */
+/*
+ * 兜底层：`.mse-container` 是插件自己加在宿主容器上的类，
+ * `.mse-container .mse-btn` 的特异性 (0,2,0) 高于宿主常见的
+ * `.markdown-preview-view button` (0,1,1) 与 `button` (0,0,1)。
+ *
+ * 这一层是**实测得出**的，不是推断 —— 去掉 !important 后，
+ * 在带 `.markdown-preview-view button { box-shadow }` 的宿主页上
+ * 实测到 box-shadow 被宿主页赢走。特异性必须压过 (0,1,1)。
+ */
+.mse-container .mse-anchor,
+.mse-container .mse-btn {
+  background: rgba(
+    127,
+    127,
+    127,
+    var(--mse-btn-opacity, 0.06)
+  );
+  box-shadow: none;
+  text-shadow: none;
+}
+
+/* 仅 hover 时有微妙的背景变化（和原生一样）
+   v1.0.43: 用类名叠加把特异性提到压过主题的 `button:hover` (0,1,1)，
+   不再需要 !important。 */
 .mse-anchor:hover,
 .mse-btn:hover {
   background: rgba(
@@ -99,14 +135,31 @@
     127,
     127,
     var(--mse-btn-hover-opacity, 0.16)
-  ) !important;
+  );
   color: var(--text-normal, #fff);
-  border-color: rgba(127, 127, 127, 0.28) !important;
+  border-color: rgba(127, 127, 127, 0.28);
+}
+
+.mse-container .mse-anchor:hover,
+.mse-container .mse-btn:hover {
+  background: rgba(
+    127,
+    127,
+    127,
+    var(--mse-btn-hover-opacity, 0.16)
+  );
+  color: var(--text-normal, #fff);
+  border-color: rgba(127, 127, 127, 0.28);
 }
 
 .mse-anchor:active,
 .mse-btn:active {
-  background: rgba(127, 127, 127, 0.28) !important;
+  background: rgba(127, 127, 127, 0.28);
+}
+
+.mse-container .mse-anchor:active,
+.mse-container .mse-btn:active {
+  background: rgba(127, 127, 127, 0.28);
 }
 
 .mse-btn:focus-visible {
@@ -136,7 +189,7 @@
   letter-spacing: -0.3px;
 }
 .mse-anchor:hover {
-  border-color: rgba(127, 127, 127, 0.45) !important;
+  border-color: rgba(127, 127, 127, 0.45);
 }
 .mse-anchor-speed { line-height: 1; }
 .mse-anchor-icon {
@@ -183,10 +236,18 @@
   align-items: center;
   gap: 4px;
   padding: 0;
-  background: none !important;
-  border: none !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
+  /*
+   * v1.0.43: 去掉 !important，改用类名叠加提高特异性。
+   *
+   * 这些 <button> 位于用户的 Markdown 视图里，宿主页可能写
+   * `button { background: ...; border: ... }` (0,0,1) 或
+   * `.some-wrapper button` (0,1,1)。用 `.mse-toolbar .mse-cluster` (0,2,0)
+   * 已经压过后者。
+   */
+  background: none;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
   pointer-events: auto;
   flex-shrink: 0;
 }
@@ -207,10 +268,13 @@
   display: block;
 }
 
-/* 按住倍速激活态 */
-.mse-hold-speed.is-active {
-  background: var(--interactive-accent, rgba(120,160,220,0.3)) !important;
-  color: var(--text-on-accent, #fff) !important;
+/* 按住倍速激活态
+   v1.0.43: 用 `.mse-btn.mse-hold-speed.is-active` (0,3,0) 提高特异性，
+   不再需要 !important —— 它必须压过 `.mse-btn:hover` (0,2,0)，
+   因为按住时指针还在按钮上。 */
+.mse-btn.mse-hold-speed.is-active {
+  background: var(--interactive-accent, rgba(120,160,220,0.3));
+  color: var(--text-on-accent, #fff);
 }
 
 /* ---------------------------------------------------------------------------
@@ -227,7 +291,7 @@
   border-radius: 6px;
   background: var(--background-primary, #1e1e1e);
   border: 1px solid var(--background-modifier-border, rgba(127,127,127,0.18));
-  box-shadow: none !important;
+  box-shadow: none;
   font-size: 13px;
   color: var(--text-normal, #ccc);
   pointer-events: auto;
@@ -253,9 +317,14 @@
   gap: 6px;
   width: 100%;
   padding: 4px 12px;
-  border: none !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
+  /*
+   * v1.0.43: 去掉 !important。
+   * `.mse-menu .mse-menu-item` (0,2,0) 已经压过宿主页的 `button` (0,0,1)
+   * 与 `.mse-menu button` (0,1,1)。
+   */
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   background: transparent;
   color: var(--text-normal, #ccc);
   font-size: 13px;
@@ -463,17 +532,19 @@
   color: var(--text-faint);
 }
 @media (max-width: 480px) {
-  .mse-container audio, .mse-container video {
-    margin-left: 56px;
-    width: calc(100% - 56px);
-  }
-  .mse-container:has(.mse-controls-wrap:hover) audio,
-  .mse-container:has(.mse-controls-wrap:hover) video,
-  .mse-container:has(.mse-controls-wrap.mse-always-expand) audio,
-  .mse-container:has(.mse-controls-wrap.mse-always-expand) video {
-    margin-left: 152px;
-    width: calc(100% - 152px);
-  }
+  /*
+   * v1.0.43: 删掉了这里的 audio/video margin-left / width 规则。
+   *
+   * 它们是**死代码**：v1.0.25 起位置完全由 JS 的 inline style 控制
+   * （main.ts 的 setAudioPosition → mediaEl.style.marginLeft / style.width），
+   * inline style 的优先级高于任何样式表规则 —— 这几条从来没生效过。
+   *
+   * 原先的 :has() 版本尤其糟：
+   *   ① :has() 会导致大范围选择器失效，Obsidian 商店审查会警告；
+   *   ② 它依赖 :hover 状态，而 JS 早就用 mouseenter/mouseleave 直接算宽度了，
+   *      两套机制会打架（CSS 说 152px，JS 说按实际按钮数算出来的值）。
+   * 去掉之后只剩 JS 一套事实来源。
+   */
   .mse-anchor, .mse-btn {
     height: 36px;
     min-height: 36px;
@@ -506,12 +577,24 @@
    v1.0.40: lint 合规 — 静态样式统一由 CSS 类提供（不再写 inline style）
    --------------------------------------------------------------------------- */
 
-/* 祖先容器工具类：防止工具栏被 overflow:hidden 裁剪 / absolute 定位参照 */
-.mse-ancestor-overflow-visible {
-  overflow: visible !important;
+/* 祖先容器工具类：防止工具栏被 overflow:hidden 裁剪 / absolute 定位参照
+ *
+ * v1.0.43: 去掉 !important，改用「类名重复」提高特异性。
+ *
+ * 为什么需要高特异性：这些类加在**宿主自己的容器**上
+ * （.markdown-preview-view / .view-content / .media-embed …），
+ * 而 Obsidian 主题（CSS snippet）在插件样式之后加载 ——
+ * 主题里的 `.markdown-preview-view { overflow: hidden }` (0,1,0)
+ * 会与我们的 `.mse-ancestor-overflow-visible` (0,1,0) 同特异性且后加载，直接赢。
+ *
+ * `.foo.foo` 的特异性是 (0,2,0)，压得过主题的 (0,1,0) 与 (0,1,1)，
+ * 而且主题仍可用 `!important` 或更高特异性覆盖回来 —— 用户不被夺走控制权。
+ */
+.mse-ancestor-overflow-visible.mse-ancestor-overflow-visible {
+  overflow: visible;
 }
-.mse-ancestor-position-relative {
-  position: relative !important;
+.mse-ancestor-position-relative.mse-ancestor-position-relative {
+  position: relative;
 }
 
 /* "前进 10s" 图标 = "后退 10s" 图形水平镜像 */

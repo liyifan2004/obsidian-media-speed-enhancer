@@ -301,7 +301,9 @@ export function normalizeSpeedSettings(
 		buttonHoverOpacity: number;
 	}
 ): NormalizedSpeedSettings {
-	const source = (raw ?? {}) as RawSettings;
+	// 用类型标注而不是 `as` 断言：raw 的类型已经是 RawSettings | null | undefined，
+	// `?? {}` 之后断言是多余的（不改变表达式类型），商店审查会列为 Warning。
+	const source: RawSettings = raw ?? {};
 
 	// customSpeeds：磁盘上可能是 null / 字符串 / 数字（旧版本存的是数组，
 	// 但手改过就什么都可能）。旧代码直接 `stored.customSpeeds.join("\n")`
