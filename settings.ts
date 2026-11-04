@@ -349,7 +349,12 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       }
       case "customSpeedsText": {
         // 文本 → 倍速列表：解析、过滤非法值、去重、排序
-        const parsed = parseCustomSpeeds(String(value ?? ""));
+        //
+        // 只接受字符串：textarea 控件的值一定是字符串。
+        // 用 `String(value ?? "")` 会在 value 是对象时得到 "[object Object]" ——
+        // 官方 eslint 规则 @typescript-eslint/no-base-to-string 会报出来，
+        // 而且那种值本身也没有意义。
+        const parsed = parseCustomSpeeds(typeof value === "string" ? value : "");
         settings.customSpeeds = parsed;
         break;
       }
