@@ -426,3 +426,70 @@ README 就是用户搜索到插件后看到的**第一份说明** —— 它太�
 - **未在真实 Obsidian 商店页面确认渲染效果**（本环境无 GUI，商店页面是客户端渲染，
   WebFetch 拿不到内容）。图标已移除，理论上不会再有「巨大图标」问题。
 - 商店页面 README 的折叠阈值具体数值未测（调研只测到了字符数，未换算成行数）。
+
+## 2026-11-06 依赖下界对齐 + 声明式 render 契约守卫
+
+**目标与完成内容**：
+
+1. **`obsidian` devDep 的下界与代码实际依赖对齐**（`^1.5.7` → `^1.13.1`）。
+   本仓库是 fleet 里唯一声明 `^1.5.7` 的 Obsidian 插件 —— 但 `settings.ts`
+   从 `"obsidian"` 导入了 `SettingDefinitionItem`，该类型自 Obsidian **1.13.0**
+   才引入（实测：1.12.3 的 d.ts 里 0 次，1.13.0 起 5 次）。
+   也就是说，**spec 声称的兼容下界比代码实际依赖的 API 代际低了一整代**。
+2. **补上声明式 `render` 回调的契约守卫**（新增 `test/declarative-render-guard.test.ts`）。
+
+**为什么第 1 条一直没暴露**：lockfile 当时解析到 `obsidian` 1.13.1，
+而 caret 范围 `^1.5.7` 允许 1.13.1（caret 语义是 `>=1.5.7 <2.0.0`），
+所以 typecheck 一直是绿的 —— **问题被 lockfile 的解析结果掩盖了**。
+一旦有人重解 lockfile、或换一台机器首次 `npm install`，解析结果就可能不同。
+
+**证据（反证）**：把 `node_modules` 实装到 `obsidian@1.5.7` 后，typecheck 立刻报 3 个错误：
+
+```
+settings.ts(6,8): error TS2305: Module '"obsidian"' has no exported member 'SettingDefinitionItem'.
+settings.ts(324,12): error TS4113: This member cannot have an 'override' modifier because it is not declared in the base class 'PluginSettingTab'.
+settings.ts(340,18): error TS4113: (同上)
+```
+
+恢复 1.14.4 后 typecheck 重新通过。
+
+**lockfile 里顶层 codemirror 的升级是必要的**：`obsidian@1.14.4` 的
+peerDependencies 要求 `@codemirror/view@6.43.13` / `@codemirror/state@6.7.6`，
+原 lockfile 锁在 6.38.6 / 6.5.0 会让 npm 回退到 `obsidian` 1.13.1 ——
+这正是本仓库此前解析不到 1.14.4、而 fleet 其余四个仓库能解析到的原因。
+
+**第 2 条防的是什么**（两条都是 Obsidian 1.13+ 声明式渲染器实测踩过的契约）：
+
+- **`render()` 的返回值会被当作「行销毁前的清理函数」调用。**
+  官方 d.ts（1.14.4）：`render: (setting, group) => void | (() => void)`。
+  写成表达式体并返回非函数值 → `TypeError: t is not a function`
+  → **设置子页面永远打不开**。
+  （社区插件 `PKM-er/obsidian-editing-toolbar` 4.1.6 的真实事故。）
+- **自定义块必须画进还活着的容器。**
+  `Setting` 结构是 `settingEl > (infoEl, controlEl)`；
+  `setting.settingEl.empty()` 会把 controlEl 一起清掉（脱离 DOM），
+  之后往 controlEl 画的内容不会出现在页面上。
+
+**反证（两个注入都当场失败，恢复后通过）**：
+
+- 注入「render 返回组件对象」→ `AssertionError: expected { fake: true } to be undefined`
+- 注入「render 里调 `settingEl.empty()`」→ `AssertionError: expected false to be true`
+
+第一版反证曾**失败**：守卫断言的是「被调方法的返回值」而不是「表达式体的
+返回值」，两者不等价（`render: (s) => this.renderX(s)` 里 renderX 返回
+undefined，表达式体也返回 undefined；但 `render: (s) => s.addDropdown(...)`
+会返回组件对象）。守卫必须盯住**表达式体**这个边界。已按此修正。
+
+**验证**：
+- `npm run verify` 全通过（typecheck + lint 0 问题 + stylelint + test + build）
+- 测试 **103 → 105**；构建产物 `main.js` 40.3kb
+- GitHub Actions CI #16 通过（1m0s）
+
+**未解决/风险**：
+- **未在真实 Obsidian 里验证**（本环境无 GUI）—— 依赖升级只影响 TypeScript
+  侧的类型可见性，运行时行为由 Obsidian 运行时决定，不受影响；
+  但 `getSettingDefinitions()` 的双轨渲染仍缺实机确认。
+- **`obsidian-mineru` 尚未补这套守卫** —— 它的测试基建是自建的
+  `node test/run.mjs` + `verify-*.ts`（esbuild 打包 + PASS/FAIL 输出），
+  没有 vitest 也没有 obsidian mock，要测 `settings.ts` 需先建 mock 基建，
+  属结构性改动，本轮不做（见跨日待办）。
