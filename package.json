@@ -29,7 +29,7 @@
     "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-plugin-obsidianmd": "^0.4.2",
-    "obsidian": "^1.5.7",
+    "obsidian": "^1.13.1",
     "stylelint": "^17.16.0",
     "stylelint-config-obsidianmd": "^0.1.0",
     "tslib": "^2.6.2",
