@@ -1,6 +1,6 @@
 {
   "name": "media-speed-enhancer",
-  "version": "1.0.44",
+  "version": "1.0.45",
   "description": "Obsidian 插件：在原生 HTML5 播放器上叠加 10s 跳转、按住倍速、自定义倍速切换按钮",
   "main": "main.js",
   "scripts": {
