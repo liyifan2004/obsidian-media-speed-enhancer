@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { pickVersion, computeVersionSync } from './version-sync.mjs';
 
 /**
@@ -78,6 +78,35 @@ writeJson('manifest.json', next.manifest, manifestFile.indent, manifestFile.trai
 writeJson('versions.json', next.versions, versionsFile.indent, versionsFile.trailingNewline);
 writeJson('package.json', next.packageJson, pkgFile.indent, pkgFile.trailingNewline);
 
+/**
+ * 同步 package-lock.json 里的版本号。
+ *
+ * ## 为什么必须做
+ *
+ * `npm version` 会同时改 package.json **和** package-lock.json，
+ * 但本脚本只写 package.json —— 于是 lockfile 里的版本号会落后。
+ *
+ * 后果（实测 2026-11-13）：MSE / JEV / folio 三个仓库的发版提交都漏掉了
+ * package-lock.json，仓库里 lockfile 停在**上一个版本号**。
+ * lockfile 不进发布产物（商店只下载 main.js / manifest.json / styles.css），
+ * 所以不影响用户 —— 但它让 `npm ci` 装出来的依赖树与版本号对不上，
+ * 也让「版本号已同步」这句话不成立。
+ *
+ * npm 自己的 lockfile 版本字段有两处：顶层 `version`，
+ * 以及 `packages[""]` 里的 `version`。两处都要改。
+ */
+if (existsSync('package-lock.json')) {
+	const lockFile = readJson('package-lock.json');
+	const lock = lockFile.data;
+	if (lock && typeof lock === 'object') {
+		lock.version = targetVersion;
+		if (lock.packages && typeof lock.packages === 'object' && lock.packages['']) {
+			lock.packages[''].version = targetVersion;
+		}
+		writeJson('package-lock.json', lock, lockFile.indent, lockFile.trailingNewline);
+	}
+}
+
 if (next.skippedVersionsEntry) {
 	console.warn(
 		`version-bump: manifest.json 缺少 minAppVersion，versions.json 未登记 ${targetVersion}。`,
@@ -86,5 +115,5 @@ if (next.skippedVersionsEntry) {
 
 console.log(
 	`version-bump: ${targetVersion} (minAppVersion ${manifestFile.data.minAppVersion ?? '—'}) — ` +
-		'manifest.json / versions.json / package.json 已同步',
+		'manifest.json / versions.json / package.json / package-lock.json 已同步',
 );

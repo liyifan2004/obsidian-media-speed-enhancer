@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
 	compareSemver,
@@ -176,5 +177,54 @@ describe("computeVersionSync", () => {
 		expect(originalManifest.version).toBe("1.0.5");
 		expect(originalPackage.version).toBe("1.0.5");
 		expect(Object.keys(originalVersions)).toEqual(["1.0.5"]);
+	});
+});
+
+/**
+ * 磁盘上的版本号一致性。
+ *
+ * ## 为什么要有这一层
+ *
+ * `computeVersionSync` 只管三个对象：manifest / package.json / versions.json。
+ * 但 `npm version` 还会改 **package-lock.json** —— 它的版本号不在
+ * 上面三个里，于是**漏掉了**。
+ *
+ * 实测（2026-11-13）：MSE / JEV / folio 三个仓库的发版提交都漏掉了
+ * package-lock.json，仓库里 lockfile 停在**上一个版本号**。
+ * lockfile 不进发布产物，所以不影响用户，但「版本号已同步」这句话不成立。
+ *
+ * 这一层直接查磁盘 —— 不信任任何脚本的自述。
+ */
+describe("磁盘版本号一致", () => {
+	const readJson = (path: string): Record<string, unknown> => {
+		const raw = readFileSync(path, "utf8");
+		return JSON.parse(raw) as Record<string, unknown>;
+	};
+
+	it("package.json 与 manifest.json 的版本号相同", () => {
+		const manifest = readJson("manifest.json");
+		const pkg = readJson("package.json");
+		expect(pkg.version).toBe(manifest.version);
+	});
+
+	it("package-lock.json 的版本号与 manifest.json 相同", () => {
+		const manifest = readJson("manifest.json");
+		const lock = readJson("package-lock.json");
+		expect(lock.version).toBe(manifest.version);
+	});
+
+	it("package-lock.json 的 packages[\"\"] 版本号也与 manifest.json 相同", () => {
+		// npm 的 lockfile 有两处版本字段，顶层与 packages[""]。
+		// 两处都要对 —— 只改一处的话，`npm ci` 仍会装出旧版本。
+		const manifest = readJson("manifest.json");
+		const lock = readJson("package-lock.json");
+		const packages = lock.packages as Record<string, Record<string, unknown>>;
+		expect(packages[""]?.version).toBe(manifest.version);
+	});
+
+	it("versions.json 登记了当前版本号", () => {
+		const manifest = readJson("manifest.json");
+		const versions = readJson("versions.json");
+		expect(versions[manifest.version as string]).toBe(manifest.minAppVersion);
 	});
 });

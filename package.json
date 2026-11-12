@@ -11,7 +11,7 @@
     "test:watch": "vitest",
     "lint:styles": "stylelint styles.css",
     "verify": "npm run typecheck && npm run lint && npm run lint:styles && npm run test && npm run build",
-    "version": "node version-bump.mjs && git add manifest.json versions.json package.json",
+    "version": "node version-bump.mjs && git add manifest.json versions.json package.json package-lock.json",
     "lint": "eslint ."
   },
   "keywords": [
