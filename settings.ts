@@ -3,6 +3,7 @@ import {
   PluginSettingTab,
   Setting,
   SliderComponent,
+  requireApiVersion,
   type SettingDefinitionItem,
 } from "obsidian";
 import { t } from "./i18n";
@@ -174,6 +175,18 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
    *
    * `searchable: false` 用在「按钮列表」上：它是一个可拖拽的自定义渲染块，
    * 没有单一名称可搜，让它进搜索反而会匹配出噪声。
+   *
+   * ## 「按钮列表」为什么必须在这里
+   *
+   * Obsidian 1.13+ 一旦本方法返回非空数组，就**完全不再调用 `display()`**。
+   * 所以命令式路径里才有的能力，必须在声明式路径里也有一份，否则
+   * 1.13+ 的用户根本看不到它 —— 这是「1.13+ 有、旧版没有」的
+   * 最隐蔽一种：旧版用户能用，新版用户不能用。
+   *
+   * 2026-11-12 实测发现并修复：按钮列表（拖拽排序 + 勾选启用）此前
+   * **只存在于命令式路径**，1.13+ 的用户完全无法启用/禁用按钮、
+   * 也无法调整顺序。修法是把它作为 `render` 自定义块挂进声明式定义，
+   * 两条路径共用同一个 {@link renderButtonList} 实现。
    */
   getSettingDefinitions(): SettingDefinitionItem[] {
     return [
@@ -181,6 +194,12 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
         type: "group",
         heading: t("headingButtons"),
         items: [
+          {
+            name: t("headingButtonList"),
+            desc: t("dragHint"),
+            searchable: false,
+            render: (setting: Setting) => this.renderButtonListBlock(setting),
+          },
           {
             name: t("headingButtonAppearance"),
             desc: t("descBgOpacity"),
@@ -204,6 +223,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
               step: 0.25,
               defaultValue: DEFAULT_SETTINGS.tempSpeed,
               validate: (value: number) => this.validateSpeed(value, SPEED_MIN, SPEED_MAX),
+              // 「按住倍速」按钮被关掉时，临时倍速这一项就没有意义。
+              // 声明式路径没有「拿到 Setting 引用再 setDisabled」的位置，
+              // 用 control.disabled 谓词表达 —— 它在每次渲染时求值。
+              disabled: () => !this.plugin.settings.enabledButtons.holdSpeed,
             },
           },
           {
@@ -242,6 +265,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
               step: 1,
               defaultValue: DEFAULT_SETTINGS.skipSeconds,
               validate: (value: number) => this.validateSpeed(value, SKIP_MIN, SKIP_MAX),
+              // 两个跳转按钮都关掉时，跳转秒数就没有意义。
+              disabled: () =>
+                !this.plugin.settings.enabledButtons.skipBack &&
+                !this.plugin.settings.enabledButtons.skipForward,
             },
           },
         ],
@@ -280,6 +307,8 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
               defaultValue: DEFAULT_SETTINGS.minDurationSeconds,
               validate: (value: number) =>
                 this.validateSpeed(value, MIN_DURATION_MIN, MIN_DURATION_MAX),
+              // 最短时长过滤没开时，阈值没有意义。
+              disabled: () => !this.plugin.settings.enableMinDuration,
             },
           },
           {
@@ -298,6 +327,8 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
               key: "sequentialPlayTone",
               type: "toggle",
               defaultValue: DEFAULT_SETTINGS.sequentialPlayTone,
+              // 顺序播放没开时，切换提示音没有意义。
+              disabled: () => !this.plugin.settings.enableSequentialPlay,
             },
           },
         ],
@@ -401,6 +432,13 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     if (key === "skipSeconds" || key === "toolbarAutoHide" || key === "globalSync") {
       await this.plugin.refreshAllToolbars();
     }
+
+    // 声明式路径（1.13+）：两个父开关会改变子项的 disabled 谓词。
+    // enableMinDuration → 最短时长秒数；enableSequentialPlay → 切换提示音。
+    // 不刷新的话，关掉父开关后子项仍然可编辑。
+    if (key === "enableMinDuration" || key === "enableSequentialPlay") {
+      this.refreshDeclarativeStates();
+    }
   }
 
   /**
@@ -427,6 +465,9 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
    */
   private renderAppearanceGroup(setting: Setting): void {
     setting.settingEl.addClass("mse-appearance-group");
+    // 声明式路径下 display() 不会被调用，CSS 变量必须在这里初始化，
+    // 否则 1.13+ 的用户拿不到自己设的透明度。
+    this.applyOpacityVariables();
 
     const bgSetting = new Setting(setting.controlEl)
       .setName(t("labelBgOpacity"))
@@ -437,10 +478,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       "buttonOpacity",
       (v) => {
         this.plugin.settings.buttonOpacity = v;
-        document.documentElement.style.setProperty(
-          "--mse-btn-opacity",
-          String(v / 100)
-        );
+        this.applyOpacityVariables();
       }
     );
 
@@ -453,10 +491,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       "buttonHoverOpacity",
       (v) => {
         this.plugin.settings.buttonHoverOpacity = v;
-        document.documentElement.style.setProperty(
-          "--mse-btn-hover-opacity",
-          String(v / 100)
-        );
+        this.applyOpacityVariables();
       }
     );
   }
@@ -476,15 +511,18 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     this.renderToolbarSection(containerEl);
     this.renderCompatSection(containerEl);
 
-    // 初始注入 CSS 变量，让按钮立即按当前透明度渲染
-    document.documentElement.style.setProperty(
-      "--mse-btn-opacity",
-      String(this.plugin.settings.buttonOpacity / 100)
-    );
-    document.documentElement.style.setProperty(
-      "--mse-btn-hover-opacity",
-      String(this.plugin.settings.buttonHoverOpacity / 100)
-    );
+    this.applyOpacityVariables();
+  }
+
+  /**
+   * 把当前透明度设置写进 CSS 变量。
+   *
+   * 委托给插件的 {@link MediaSpeedEnhancerPlugin.applyAppearance} ——
+   * 插件加载时已经写过一次，这里只在用户改值时补一次。
+   * 单一出口，避免两处各写一遍换算逻辑。
+   */
+  private applyOpacityVariables(): void {
+    this.plugin.applyAppearance();
   }
 
   // ===========================================================================
@@ -513,10 +551,7 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       "buttonOpacity",
       (v) => {
         this.plugin.settings.buttonOpacity = v;
-        document.documentElement.style.setProperty(
-          "--mse-btn-opacity",
-          String(v / 100)
-        );
+        this.applyOpacityVariables();
       }
     );
 
@@ -528,12 +563,29 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
       "buttonHoverOpacity",
       (v) => {
         this.plugin.settings.buttonHoverOpacity = v;
-        document.documentElement.style.setProperty(
-          "--mse-btn-hover-opacity",
-          String(v / 100)
-        );
+        this.applyOpacityVariables();
       }
     );
+  }
+
+  /**
+   * 声明式路径里的「按钮列表」自定义块。
+   *
+   * 与命令式路径共用 {@link renderButtonList} —— 两条路径不各自实现一遍，
+   * 否则迟早漂移。这正是本缺陷的成因：命令式有、声明式没有，
+   * 结果 1.13+ 的用户完全无法启用/禁用按钮、也无法调整顺序。
+   *
+   * 内容画进 `setting.controlEl`，不是 `setting.settingEl`：
+   * Obsidian 的 Setting 结构是 `settingEl > (infoEl, controlEl)`，
+   * `settingEl.empty()` 会把 controlEl 一起清掉（脱离 DOM）。
+   */
+  private renderButtonListBlock(setting: Setting): void {
+    setting.setClass("mse-button-list-block");
+    const container = setting.controlEl.createDiv({ cls: "mse-button-list-wrap" });
+    // 让「重置」按钮能只刷新列表（声明式路径下 display() 不会被调用，
+    // this.buttonListContainer 必须在渲染时登记）。
+    this.buttonListContainer = container;
+    this.renderButtonList(container);
   }
 
   /**
@@ -638,6 +690,10 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
               this.renderButtonList(this.buttonListContainer);
             }
             this.refreshDependentSettingStates();
+            // 声明式路径（1.13+）：按钮开关会改变若干 control 的 disabled 谓词，
+            // 必须让框架重新求值。不调用的话，「按住倍速」关掉后
+            // 「临时倍速」这一项仍然是可编辑的。
+            this.refreshDeclarativeStates();
           })
       );
     // 隐藏 footer 的左侧文字由 CSS 完成（.mse-footer-row .setting-item-info），
@@ -661,6 +717,8 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     this.applyButtonRowState(row, toggle.checked);
     // 联动：相关设置项的可用状态
     this.refreshDependentSettingStates();
+    // 声明式路径（1.13+）：重新求值各 control 的 disabled 谓词。
+    this.refreshDeclarativeStates();
   }
 
   /** 拖拽排序落定：保存新顺序、重建工具栏并按新顺序重排 DOM 行。 */
@@ -697,6 +755,27 @@ export class MediaSpeedEnhancerSettingTab extends PluginSettingTab {
     // v1.0.38: 切换音频提示音 = enableSequentialPlay 子项。
     const seqEnabled = !!this.plugin.settings.enableSequentialPlay;
     this.seqToneSetting?.setDisabled(!seqEnabled);
+  }
+
+  /**
+   * 声明式路径（Obsidian 1.13+）的状态刷新。
+   *
+   * 1.13+ 的设置树由框架持有，改了状态要让它自己重新求值：
+   * `refreshDomState()` 重新求值各 control 的 `disabled` 谓词
+   * （官方 d.ts：「Call this from a render callback's onChange ... after
+   * mutating state that other settings' predicates depend on」）。
+   *
+   * 按钮开关只影响 disabled 谓词，不影响结构，所以用 refreshDomState 就够；
+   * 按钮顺序变了会改变列表的渲染内容，交给 refreshAllToolbars 重建工具栏，
+   * 列表本身由 renderButtonList 重画。
+   *
+   * `requireApiVersion` 是 Obsidian 官方的运行时特性探测 ——
+   * 低于 1.13.0 的版本没有这个方法，调用会抛错。
+   */
+  private refreshDeclarativeStates(): void {
+    if (requireApiVersion("1.13.0")) {
+      this.refreshDomState();
+    }
   }
 
   // ===========================================================================

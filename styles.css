@@ -425,6 +425,23 @@
    --------------------------------------------------------------------------- */
 
 /* 按钮配置：每一行同时承载拖拽排序与启用开关 */
+
+/*
+ * 声明式路径（Obsidian 1.13+）里的按钮列表自定义块。
+ *
+ * 声明式渲染器给的是一行标准 Setting：左边的名称/描述（infoEl），
+ * 右边的控件区（controlEl）。控件区默认是窄的一列，自定义块塞进去会被挤。
+ * 这里把这一行改成「整行通栏」，与命令式路径里
+ * 「标题在上、列表在下」的观感一致。
+ */
+.mse-button-list-block {
+  display: block;
+}
+.mse-button-list-block .setting-item-control {
+  justify-content: flex-start;
+  width: 100%;
+}
+
 .mse-button-order-list {
   margin-top: 8px;
   margin-bottom: 12px;

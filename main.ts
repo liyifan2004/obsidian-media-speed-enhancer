@@ -11,6 +11,7 @@ import {
   normalizeButtonOrder,
   normalizeSpeedSettings,
 } from "./src/speed";
+import { applyOpacityVariables } from "./src/appearance";
 
 // ============================================================================
 // 关键设计决策 / Critical Design Decisions
@@ -215,6 +216,15 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
 
+    // 按钮外观（透明度）是**渲染层**的状态，写在插件加载时，
+    // 而不是等用户打开设置页才写。
+    //
+    // 2026-11-12 修复：此前这段逻辑在设置页里（display() 的末尾 +
+    // 滑块的 onChange）。两个后果：
+    //   - 用户没打开过设置页时，按钮透明度一律是 CSS 里的 fallback 值；
+    //   - Obsidian 1.13+ 完全不调用 display()，变量永远写不进去。
+    this.applyAppearance();
+
     this.addSettingTab(new MediaSpeedEnhancerSettingTab(this.app, this));
 
     // v1.0.36: 注册命令，让 4 个按钮均可绑定快捷键（作用目标 = 当前/最近使用的媒体）
@@ -354,6 +364,20 @@ export default class MediaSpeedEnhancerPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  /**
+   * 把按钮外观（透明度）写进 CSS 变量。
+   *
+   * 设置页在改外观时也会调它 —— 单一出口，
+   * 避免「插件加载时写一次、设置页又写一次、两边算法不一样」。
+   */
+  applyAppearance(): void {
+    applyOpacityVariables(
+      document.documentElement.style,
+      this.settings.buttonOpacity,
+      this.settings.buttonHoverOpacity
+    );
   }
 
   // ------------------------------------------------------------------

@@ -30,140 +30,7 @@
  */
 import { describe, it, expect } from "vitest";
 
-/** 模拟 Obsidian 的容器：empty() 会让子容器脱离 DOM。 */
-class FakeEl {
-	children: FakeEl[] = [];
-	/** 被 empty() 清掉后为 false —— 表示「已脱离 DOM」。 */
-	attached = true;
-	classes: string[] = [];
-
-	constructor(public tag = "div") {}
-
-	appendChild(child: FakeEl): FakeEl {
-		this.children.push(child);
-		return child;
-	}
-
-	createDiv(cls?: string): FakeEl {
-		const el = new FakeEl("div");
-		if (cls) el.classes.push(cls);
-		this.appendChild(el);
-		return el;
-	}
-
-	createSpan(cls?: string): FakeEl {
-		const el = new FakeEl("span");
-		if (cls) el.classes.push(cls);
-		this.appendChild(el);
-		return el;
-	}
-
-	createEl(tag: string, _opts?: unknown): FakeEl {
-		const el = new FakeEl(tag);
-		this.appendChild(el);
-		return el;
-	}
-
-	addClass(cls: string): void {
-		this.classes.push(cls);
-	}
-
-	setText(_text: string): void {
-		/* noop */
-	}
-
-	/** 清空自身与全部后代，并把后代标记为「已脱离 DOM」。 */
-	empty(): void {
-		// 关键：真实 Obsidian 的 settingEl.empty() 会**连带清掉 controlEl**
-		//（controlEl 是 settingEl 的子节点），清掉之后往 controlEl 里画的内容
-		// 不会出现在页面上。所以这里必须递归把子节点也标记为脱离。
-		const walk = (el: FakeEl) => {
-			el.attached = false;
-			for (const child of el.children) walk(child);
-			el.children.length = 0;
-		};
-		walk(this);
-		this.attached = false;
-	}
-}
-
-/**
- * 模拟 Obsidian 的 Setting。
- *
- * 关键点：`empty()` 只清 infoEl —— 与真实 Obsidian 一致，
- * 而 `settingEl.empty()` 会连带清掉 controlEl（这是要防的那个坑）。
- */
-class FakeSetting {
-	settingEl = new FakeEl();
-	infoEl = new FakeEl();
-	controlEl = new FakeEl();
-	name = "";
-
-	constructor() {
-		this.settingEl.appendChild(this.infoEl);
-		this.settingEl.appendChild(this.controlEl);
-	}
-
-	setName(n: string): this {
-		this.name = n;
-		return this;
-	}
-
-	setDesc(): this {
-		return this;
-	}
-
-	setHeading(): this {
-		return this;
-	}
-
-	setClass(): this {
-		return this;
-	}
-
-	addToggle(): this {
-		return this;
-	}
-
-	addText(): this {
-		return this;
-	}
-
-	addTextArea(): this {
-		return this;
-	}
-
-	addDropdown(): this {
-		return this;
-	}
-
-	addSlider(): this {
-		return this;
-	}
-
-	addButton(): this {
-		return this;
-	}
-}
-
-/**
- * 模拟 Obsidian 1.13+ 声明式渲染器对 render 回调的处理。
- *
- * 这是本文件的核心：**返回值非 undefined 且非函数 → 抛 TypeError**，
- * 与真实 Obsidian 的行为一致（`TypeError: t is not a function`）。
- */
-function invokeRender(
-	render: (setting: unknown, group: unknown) => unknown,
-	setting: FakeSetting
-): void {
-	const result = render(setting, undefined);
-	if (result !== undefined && result !== null) {
-		if (typeof result !== "function") {
-			throw new TypeError("t is not a function");
-		}
-		(result as () => void)();
-	}
-}
+import { FakeSetting, invokeRender } from "./helpers/setting-dom";
 
 describe("声明式 render 回调契约", () => {
 	it("每个 render 回调的返回值都必须是 undefined（不能返回组件对象）", async () => {
@@ -176,6 +43,9 @@ describe("声明式 render 回调契约", () => {
 				/* noop */
 			},
 			async refreshAllToolbars() {
+				/* noop */
+			},
+			applyAppearance() {
 				/* noop */
 			},
 		};
@@ -223,6 +93,9 @@ describe("声明式 render 回调契约", () => {
 				/* noop */
 			},
 			async refreshAllToolbars() {
+				/* noop */
+			},
+			applyAppearance() {
 				/* noop */
 			},
 		};
